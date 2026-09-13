@@ -21,3 +21,8 @@ build/
 target/
 **/*.rs.bk
 Cargo.lock
+
+# --- Android 签名密钥（禁止上传） ---
+android-release/
+*.jks
+*.keystore

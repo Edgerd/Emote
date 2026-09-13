@@ -1,0 +1,242 @@
+name: Emote Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  FRB_VERSION: '2.13.0'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.4
+          cache: true
+
+      - name: 安装 Rust（MSVC target）
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: 缓存 Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: 安装 flutter_rust_bridge_codegen
+        run: cargo install flutter_rust_bridge_codegen@${{ env.FRB_VERSION }}
+
+      - name: 生成 FFI 绑定
+        run: flutter_rust_bridge_codegen generate
+        working-directory: ./
+
+      - name: Flutter 依赖
+        run: flutter pub get
+        working-directory: app
+
+      - name: 编译 Rust 核心库
+        run: cargo build --release --target x86_64-pc-windows-msvc
+        working-directory: rust/emote_core
+
+      - name: 构建 Windows 版本
+        run: flutter build windows --release
+        working-directory: app
+
+      - name: 上传 Windows 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: app/build/windows/x64/runner/Release/
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Linux 构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libstdc++-12-dev
+
+      - name: 安装 Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.4
+          cache: true
+
+      - name: 安装 Rust（x86_64 GNU target）
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: 缓存 Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: 安装 flutter_rust_bridge_codegen
+        run: cargo install flutter_rust_bridge_codegen@${{ env.FRB_VERSION }}
+
+      - name: 生成 FFI 绑定
+        run: flutter_rust_bridge_codegen generate
+        working-directory: ./
+
+      - name: Flutter 依赖
+        run: flutter pub get
+        working-directory: app
+
+      - name: 编译 Rust 核心库
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+        working-directory: rust/emote_core
+
+      - name: 构建 Linux 版本
+        run: flutter build linux --release
+        working-directory: app
+
+      - name: 安装 appimagetool
+        run: |
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool-x86_64.AppImage
+
+      - name: 打包 AppImage
+        run: |
+          set -euo pipefail
+          cd app
+          mkdir -p packaging/AppDir/usr/bin packaging/AppDir/usr/share/applications
+          cp -r build/linux/x64/release/bundle/* packaging/AppDir/usr/bin/
+
+          cat > packaging/AppDir/usr/share/applications/emote.desktop <<'EOF'
+          [Desktop Entry]
+          Name=Emote
+          Exec=emote
+          Icon=emote
+          Type=Application
+          Categories=Utility;
+          Terminal=false
+          EOF
+
+          mkdir -p packaging/AppDir/usr/share/icons/hicolor/256x256/apps
+          python3 - <<'EOF'
+          import base64
+          # 极简占位 PNG；后续可替换为项目真实图标
+          png = base64.b64decode(
+              "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+          )
+          open("packaging/AppDir/usr/share/icons/hicolor/256x256/apps/emote.png", "wb").write(png)
+          EOF
+
+          cd ..
+          export LDAI_OUTPUT="emote-linux-x86_64.AppImage"
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-gtk/releases/download/continuous/linuxdeploy-plugin-gtk-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk-x86_64.AppImage
+          ./linuxdeploy-x86_64.AppImage --appimage-extract-and-run --plugin gtk --appdir app/packaging/AppDir
+          ./appimagetool-x86_64.AppImage app/packaging/AppDir app/packaging/emote-linux-x86_64.AppImage
+          ls -la app/packaging/emote-linux-x86_64.AppImage
+
+      - name: 上传 Linux 产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: app/packaging/emote-linux-x86_64.AppImage
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: 安装 Flutter stable
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.4
+          cache: true
+
+      - name: 安装 Rust（Android 交叉编译 targets）
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - name: 缓存 Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: 安装 flutter_rust_bridge_codegen 与 cargo-ndk
+        run: |
+          cargo install flutter_rust_bridge_codegen@${{ env.FRB_VERSION }}
+          cargo install cargo-ndk --locked
+
+      - name: 生成 FFI 绑定
+        run: flutter_rust_bridge_codegen generate
+        working-directory: ./
+
+      - name: Flutter 依赖
+        run: flutter pub get
+        working-directory: app
+
+      - name: 编译 Rust 核心库（Android ABI）
+        run: |
+          cargo ndk -t arm64-v8a -t armeabi-v7a -t x86_64 \
+            -o ../../app/android/app/src/main/jniLibs build --release
+        working-directory: rust/emote_core
+
+      - name: 写入 Android 签名配置
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > app/android/app/upload-keystore.jks
+          cat > app/android/key.properties <<EOF
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyPassword=$ANDROID_KEY_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          storeFile=upload-keystore.jks
+          EOF
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+
+      - name: 构建签名 APK
+        run: flutter build apk --release
+        working-directory: app
+
+      - name: 上传 Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-release
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    needs: [build-windows, build-linux, build-android]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 下载全部构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Emote ${{ github.ref_name }}
+          files: |
+            release-artifacts/**/*.dll
+            release-artifacts/**/*.exe
+            release-artifacts/**/*.AppImage
+            release-artifacts/**/*.apk
+          generate_release_notes: true
