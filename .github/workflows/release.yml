@@ -137,7 +137,7 @@ jobs:
           wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-gtk/releases/download/continuous/linuxdeploy-plugin-gtk-x86_64.AppImage
           chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk-x86_64.AppImage
           ./linuxdeploy-x86_64.AppImage --appimage-extract-and-run --plugin gtk --appdir app/packaging/AppDir
-          ./appimagetool-x86_64.AppImage app/packaging/AppDir app/packaging/emote-linux-x86_64.AppImage
+          ./appimagetool-x86_64.AppImage --appimage-extract-and-run app/packaging/AppDir app/packaging/emote-linux-x86_64.AppImage
           ls -la app/packaging/emote-linux-x86_64.AppImage
 
       - name: 上传 Linux 产物
