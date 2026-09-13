@@ -30,7 +30,7 @@ RESULT[platform]="linux"
 if [ "$HAVE_XVFB" = true ]; then
   echo "==> [perf] 驱动 integration_test（xvfb）..."
   LOG=$(mktemp)
-  if ! xvfb-run -a flutter test "$APP/integration_test/perf_bench_test.dart" -d linux >"$LOG" 2>&1; then
+  if ! (cd "$APP" && xvfb-run -a flutter test integration_test/perf_bench_test.dart -d linux) >"$LOG" 2>&1; then
     echo "!! integration_test 未通过（可能未构建 release 或缺少 GTK），回退到 VM 侧 FFI 基准" >&2
     tail -5 "$LOG" >&2
   else
@@ -56,14 +56,11 @@ if [ "$HAVE_XVFB" = true ] && [ -x "$APP/build/linux/x64/release/bundle/emote" ]
   echo "==> [perf] 采样 release 应用空闲 RSS..."
   xvfb-run -a "$APP/build/linux/x64/release/bundle/emote" >/tmp/emote_perf_run.log 2>&1 &
   sleep 6
-  # xvfb-run 内部 re-exec，App 进程 argv[0] 为 .../bundle/emote
-  PID="$(pgrep -f 'build/linux/x64/release/bundle/emote' | head -1 || true)"
-  if [ -n "$PID" ]; then
-    RSS_KB=$(grep VmRSS "/proc/$PID/status" | awk '{print $2}')
-    RESULT[idle_rss_kib]="${RSS_KB:-n/a}"
-  else
-    RESULT[idle_rss_kib]="n/a"
-  fi
+  # xvfb-run 内部 re-exec，App 进程 argv[0] 为 .../bundle/emote；取匹配进程中最大的 VmRSS
+  RSS_KB=$(for PID in $(pgrep -f 'build/linux/x64/release/bundle/emote' || true); do
+    grep VmRSS /proc/$PID/status 2>/dev/null | awk '{print $2}'
+  done | sort -n | tail -1)
+  RESULT[idle_rss_kib]="${RSS_KB:-n/a}"
   pkill -f 'build/linux/x64/release/bundle/emote' 2>/dev/null || true
   pkill -f Xvfb 2>/dev/null || true
 fi
@@ -74,13 +71,13 @@ cat > "$OUTPUT" <<EOF
   "platform": "${RESULT[platform]}",
   "flutter": "$(flutter --version --machine 2>/dev/null | grep -oE '"frameworkVersion":"[0-9.]*"' | cut -d'"' -f4 || echo unknown)",
   "collected_at": "$(date -Is)",
-  "launch_to_first_frame_ms": "${RESULT[first_frame_ms]}",
-  "idle_rss_kib": "${RESULT[idle_rss_kib]}",
+  "launch_to_first_frame_ms": "${RESULT[first_frame_ms]:-n/a}",
+  "idle_rss_kib": "${RESULT[idle_rss_kib]:-n/a}",
   "greet_ffi_1000": {
-    "n": "${RESULT[greet_n]}",
-    "avg_ms": "${RESULT[greet_avg_ms]}",
-    "p50_ms": "${RESULT[greet_p50_ms]}",
-    "p95_ms": "${RESULT[greet_p95_ms]}"
+    "n": "${RESULT[greet_n]:-n/a}",
+    "avg_ms": "${RESULT[greet_avg_ms]:-n/a}",
+    "p50_ms": "${RESULT[greet_p50_ms]:-n/a}",
+    "p95_ms": "${RESULT[greet_p95_ms]:-n/a}"
   }
 }
 EOF
