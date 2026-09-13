@@ -28,6 +28,38 @@ Emote is a LAN-only, cross-platform remote control application for Windows, Linu
 └── scripts/          # 构建 / 工具脚本
 ```
 
+## 环境与版本锁定 / Environment & Version Lock
+
+本段（1.1）已在开发机完成基础环境搭建并锁定版本（Flutter stable / Rust stable / flutter_rust_bridge 2.x 最新）。
+
+| 组件 | 版本 |
+| --- | --- |
+| Flutter (stable) | 3.47.4（框架修订 9584c6713b / Engine 0e228ec8c8） |
+| Dart | 3.13.3 |
+| Rust (stable) | 1.92.0 |
+| flutter_rust_bridge_codegen | 2.13.0 |
+| cargo-ndk | 4.1.2 |
+| Android SDK cmdline-tools | 12.0 |
+| Android platform-tools | 37.0.1 |
+| Android platform | android-36 |
+| Android build-tools | 36.0.0 |
+| Android NDK | 28.2.13676358 |
+| JDK | 17.0.2 |
+| cmake / ninja / clang | 3.28.3 / 1.11.1 / 17.0.0 |
+
+- Rust 工具链锁定：见 [rust-toolchain.toml](./rust-toolchain.toml)
+- Flutter 版本记录：见 [.fvmrc](./.fvmrc)
+
+### 镜像环境变量
+
+```sh
+export FLUTTER_STORAGE_BASE_URL=https://storage.flutter-io.cn
+export PUB_HOSTED_URL=https://pub.flutter-io.cn
+export RUSTUP_DIST_SERVER=https://rsproxy.cn
+export RUSTUP_UPDATE_ROOT=https://rsproxy.cn/rustup
+export ANDROID_HOME=/opt/android-sdk
+```
+
 ## 分支约定 / Branching
 
 按大段任务推进，每完成一个阶段即上传一次。当前阶段：`dev-1.0`。
