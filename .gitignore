@@ -1,0 +1,23 @@
+# --- General ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+*.iml
+
+# --- Flutter / Dart ---
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.log
+
+# --- Rust ---
+target/
+**/*.rs.bk
+Cargo.lock
