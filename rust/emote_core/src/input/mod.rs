@@ -1,0 +1,1 @@
+//! input —— 远端输入注入。Linux 走 reis/libei 或 D-Bus portal；uinput 通过内核接口访问，不引入额外 crate。

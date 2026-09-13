@@ -1,0 +1,1 @@
+//! metrics::report —— 指标上报与聚合，供 UI/metrics 面板展示。后续分段实现。

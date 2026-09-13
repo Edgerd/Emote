@@ -75,7 +75,25 @@ set_target_properties(${BINARY_NAME}
 include(flutter/generated_plugins.cmake)
 
 
-# === Installation ===
+# === Emote Rust core (emote_core) native library ===
+# fl_rust_bridge 在运行时动态加载 libemote_core，因此 release 包必须把该
+# cdylib 一并打进 bundle 的 lib/ 目录。这里用 cargo 编译并交由 install 部署。
+set(EMOTE_CORE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../rust/emote_core")
+set(EMOTE_CORE_OUT "${CMAKE_CURRENT_BINARY_DIR}/libemote_core.so")
+set(EMOTE_CORE_CARGO_LIB "${EMOTE_CORE_SRC_DIR}/target/release/libemote_core.so")
+
+add_custom_command(
+  OUTPUT ${EMOTE_CORE_OUT}
+  COMMAND cargo build --release
+          --manifest-path ${EMOTE_CORE_SRC_DIR}/Cargo.toml
+  COMMAND ${CMAKE_COMMAND} -E copy ${EMOTE_CORE_CARGO_LIB} ${EMOTE_CORE_OUT}
+  COMMENT "Building Emote Rust core (emote_core) via cargo"
+  VERBATIM
+)
+
+add_custom_target(emote_core_lib ALL DEPENDS ${EMOTE_CORE_OUT})
+add_dependencies(${BINARY_NAME} emote_core_lib)
+
 # By default, "installing" just makes a relocatable bundle in the build
 # directory.
 set(BUILD_BUNDLE_DIR "${PROJECT_BINARY_DIR}/bundle")
@@ -111,6 +129,11 @@ set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
    COMPONENT Runtime)
+
+# Bundle the Emote Rust core (emote_core) cdylib into the lib/ directory.
+install(FILES ${EMOTE_CORE_OUT}
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  COMPONENT Runtime)
 
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.

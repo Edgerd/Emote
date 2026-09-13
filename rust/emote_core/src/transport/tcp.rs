@@ -1,0 +1,1 @@
+//! transport::tcp —— 回退传输层实现，基于 tokio::net::TcpStream。第 1.5 段实现。

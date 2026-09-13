@@ -17,6 +17,13 @@ build/
 .flutter-plugins-dependencies
 *.log
 
+# --- Android build outputs & dev-local targets ---
+app/android/app/src/main/jniLibs/
+app/android/rust-android-target/
+
+# 工具/环境目录
+.trae/
+
 # --- Rust ---
 target/
 **/*.rs.bk

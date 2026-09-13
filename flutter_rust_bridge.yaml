@@ -1,5 +1,9 @@
-# flutter_rust_bridge 配置
-# 供 flutter_rust_bridge_codegen generate 使用
-rust_input: rust/emote_core
+# flutter_rust_bridge 2.13 配置（供 `flutter_rust_bridge_codegen generate` 使用）。
+# 路径均相对本文件所在目录（/workspace）。
+
+# 要生成桥接的 Rust 模块：`crate::api` 表示 emote_core 中的 api 模块。
+rust_input: crate::api
+# Cargo crate 根目录（含 Cargo.toml）。
 rust_root: rust/emote_core
-dart_output: app/lib
+# 生成的 Dart 桥接代码输出目录。
+dart_output: app/lib/src/rust

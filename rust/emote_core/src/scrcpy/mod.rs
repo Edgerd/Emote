@@ -1,0 +1,1 @@
+//! scrcpy —— scrcpy 协议（仅 Windows 控制 Android 方向复用）。第 3.1 段实现，scrcpy-server 届时单独下载。
