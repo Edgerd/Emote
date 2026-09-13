@@ -33,3 +33,6 @@ Cargo.lock
 android-release/
 *.jks
 *.keystore
+
+# --- 本地构建/dist 产物（release 由 GitHub Actions 产物发布） ---
+dist/
