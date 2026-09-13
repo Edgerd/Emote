@@ -104,7 +104,7 @@ jobs:
           wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x appimagetool-x86_64.AppImage
 
-      - name: 打包 AppImage
+      - name: 打包 AppImage + Linux 发布包
         run: |
           set -euo pipefail
           cd app
@@ -131,20 +131,39 @@ jobs:
           open("packaging/AppDir/usr/share/icons/hicolor/256x256/apps/emote.png", "wb").write(png)
           EOF
 
+          # 1) 可靠的发布包：直接打包 Flutter release bundle（保证可运行，解压后执行 ./emote）
+          tar -C build/linux/x64/release/bundle -czf packaging/emote-linux-x86_64.tar.gz .
+          ls -la packaging/emote-linux-x86_64.tar.gz
+
+          # 2) AppImage（尽力而为）：gtk 插件改用 raw 源码脚本，避免已失效的 AppImage 资产(404)
           cd ..
-          export LDAI_OUTPUT="emote-linux-x86_64.AppImage"
-          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-gtk/releases/download/continuous/linuxdeploy-plugin-gtk-x86_64.AppImage
-          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk-x86_64.AppImage
-          ./linuxdeploy-x86_64.AppImage --appimage-extract-and-run --plugin gtk --appdir app/packaging/AppDir
-          ./appimagetool-x86_64.AppImage --appimage-extract-and-run app/packaging/AppDir app/packaging/emote-linux-x86_64.AppImage
-          ls -la app/packaging/emote-linux-x86_64.AppImage
+          export PATH="$PWD:$PATH"
+          set +e
+          (
+            set -euo pipefail
+            export DEPLOY_GTK_VERSION=3
+            export LDAI_OUTPUT="emote-linux-x86_64.AppImage"
+            curl -fsSL -o linuxdeploy-plugin-gtk.sh https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh
+            chmod +x linuxdeploy-plugin-gtk.sh
+            wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+            chmod +x linuxdeploy-x86_64.AppImage
+            ./linuxdeploy-x86_64.AppImage --appimage-extract-and-run --plugin gtk --appdir app/packaging/AppDir
+            ./appimagetool-x86_64.AppImage --appimage-extract-and-run app/packaging/AppDir app/packaging/emote-linux-x86_64.AppImage
+            ls -la app/packaging/emote-linux-x86_64.AppImage
+          )
+          APPIMAGE_RC=$?
+          set -e
+          if [ "$APPIMAGE_RC" -ne 0 ]; then
+            echo "::warning::AppImage 打包未成功(rc=$APPIMAGE_RC)，已回退到 tar.gz 发布包"
+          fi
 
       - name: 上传 Linux 产物
         uses: actions/upload-artifact@v4
         with:
           name: linux-release
-          path: app/packaging/emote-linux-x86_64.AppImage
+          path: |
+            app/packaging/emote-linux-x86_64.AppImage
+            app/packaging/emote-linux-x86_64.tar.gz
 
   build-android:
     runs-on: ubuntu-latest
@@ -239,4 +258,5 @@ jobs:
             release-artifacts/**/*.exe
             release-artifacts/**/*.AppImage
             release-artifacts/**/*.apk
+            release-artifacts/**/*.tar.gz
           generate_release_notes: true
