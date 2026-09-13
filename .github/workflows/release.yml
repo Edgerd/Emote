@@ -258,10 +258,15 @@ jobs:
           mapfile -t FILES < <(find release-artifacts -type f \( \
             -name '*.exe' -o -name '*.dll' -o -name '*.AppImage' \
             -o -name '*.apk' -o -name '*.tar.gz' \) 2>/dev/null || true)
-          ARGS=()
-          for f in "${FILES[@]}"; do ARGS+=("-a" "$f"); done
-          echo "上传 ${#FILES[@]} 个文件到 release ${GITHUB_REF_NAME}"
-          gh release create "$GITHUB_REF_NAME" \
-            --title "Emote ${GITHUB_REF_NAME}" \
-            --notes "自动构建发布（Windows / Linux / Android）。Linux 提供 AppImage（尽力而为）与 tar.gz 发布包。" \
-            "${ARGS[@]}"
+          echo "共 ${#FILES[@]} 个发布文件："
+          printf '  %s\n' "${FILES[@]}"
+          # 已存在 Release（重试/再次运行）时改为上传，避免 "already exists"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} 已存在，上传文件到现有 Release"
+            gh release upload "$GITHUB_REF_NAME" "${FILES[@]}" --clobber
+          else
+            echo "创建新 Release ${GITHUB_REF_NAME}"
+            gh release create "$GITHUB_REF_NAME" "${FILES[@]}" \
+              --title "Emote ${GITHUB_REF_NAME}" \
+              --notes "自动构建发布（Windows / Linux / Android）。Linux 提供 AppImage（尽力而为）与 tar.gz 发布包。"
+          fi
