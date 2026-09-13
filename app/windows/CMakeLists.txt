@@ -58,6 +58,26 @@ add_subdirectory("runner")
 include(flutter/generated_plugins.cmake)
 
 
+# === Emote Rust core (emote_core) native library ===
+# flutter_rust_bridge 在运行时动态加载 emote_core.dll，因此 release 包必须把
+# 该 cdylib 一并打进可执行文件旁（Windows 下 DLL 位于 exe 同级目录）。
+set(EMOTE_CORE_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../rust/emote_core")
+set(EMOTE_CORE_OUT "${CMAKE_CURRENT_BINARY_DIR}/emote_core.dll")
+set(EMOTE_CORE_CARGO_LIB "${EMOTE_CORE_SRC_DIR}/target/x86_64-pc-windows-msvc/release/emote_core.dll")
+
+add_custom_command(
+  OUTPUT ${EMOTE_CORE_OUT}
+  COMMAND cargo build --release --target x86_64-pc-windows-msvc
+          --manifest-path ${EMOTE_CORE_SRC_DIR}/Cargo.toml
+  COMMAND ${CMAKE_COMMAND} -E copy ${EMOTE_CORE_CARGO_LIB} ${EMOTE_CORE_OUT}
+  COMMENT "Building Emote Rust core (emote_core) via cargo"
+  VERBATIM
+)
+
+add_custom_target(emote_core_lib ALL DEPENDS ${EMOTE_CORE_OUT})
+add_dependencies(${BINARY_NAME} emote_core_lib)
+
+
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can
 # run in place. This is done instead of making a separate bundle (as on Linux)
@@ -86,6 +106,11 @@ if(PLUGIN_BUNDLED_LIBRARIES)
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endif()
+
+# Bundle the Emote Rust core (emote_core) cdylib alongside the executable.
+install(FILES ${EMOTE_CORE_OUT}
+  DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+  COMPONENT Runtime)
 
 # Copy the native assets provided by the build.dart from all packages.
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")

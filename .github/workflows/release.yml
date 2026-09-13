@@ -49,11 +49,24 @@ jobs:
         run: flutter build windows --release
         working-directory: app
 
+      - name: 打包 Windows 为 ZIP（自包含：exe + dll + data/）
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "app/build/windows/x64/runner/Release/*" `
+            -DestinationPath "app/build/windows/emote-windows-x86_64.zip" -Force
+          # 校验包内容包含必需运行时文件
+          Get-ChildItem "app/build/windows/x64/runner/Release/" -Recurse |
+            Where-Object { $_.Name -in @('emote.exe','emote_core.dll','flutter_windows.dll','app.so','icudtl.dat') } |
+            ForEach-Object { Write-Host "INCLUDED: $($_.FullName.Replace($PWD.Path,''))" }
+          Get-Item "app/build/windows/emote-windows-x86_64.zip" | Select-Object Name,Length
+
       - name: 上传 Windows 产物
         uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: app/build/windows/x64/runner/Release/
+          path: |
+            app/build/windows/x64/runner/Release/
+            app/build/windows/emote-windows-x86_64.zip
 
   build-linux:
     runs-on: ubuntu-latest
@@ -254,10 +267,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # 汇总三端可运行产物（exe/dll/AppImage/apk/tar.gz）
+          # 汇总三端可运行产物（exe/dll/AppImage/apk/tar.gz/zip）
           mapfile -t FILES < <(find release-artifacts -type f \( \
             -name '*.exe' -o -name '*.dll' -o -name '*.AppImage' \
-            -o -name '*.apk' -o -name '*.tar.gz' \) 2>/dev/null || true)
+            -o -name '*.apk' -o -name '*.tar.gz' -o -name '*.zip' \) 2>/dev/null || true)
           echo "共 ${#FILES[@]} 个发布文件："
           printf '  %s\n' "${FILES[@]}"
           # 已存在 Release（重试/再次运行）时改为上传，避免 "already exists"
