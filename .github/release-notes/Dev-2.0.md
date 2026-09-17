@@ -46,7 +46,7 @@
 - [ ] 实现 Windows ↔ Linux 双向控制
 - [ ] 实现 Android 控制桌面端（自研捕获+编码+注入）
 - [ ] 复用 scrcpy 实现桌面端控制 Android
-- [ ] M3E（Material 3 Expressive）界面统一
+- [ ] MD3E（Material Design 3 Expressive）界面统一
 - [ ] 多会话标签页与自适应码率控制
 - [ ] 硬件加速解码与 FFI 零拷贝优化
 

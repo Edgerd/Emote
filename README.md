@@ -54,7 +54,7 @@ Emote 是一款面向**纯局域网**的跨平台远程控制软件，端到端�
 - [ ] H.264 软编/软解与视频渲染
 
 ### 体验与性能
-- [ ] **M3E 界面（Material 3 Expressive）统一**
+- [ ] **MD3E 界面（Material Design 3 Expressive）统一**
 - [ ] 多会话标签页管理
 - [ ] 断线自动重连（QUIC 0-RTT）
 - [ ] 自适应码率 / 帧率控制
