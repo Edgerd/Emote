@@ -1,4 +1,3 @@
-import 'dart:ffi';
 import 'dart:io';
 
 import 'package:dynamic_color/dynamic_color.dart';
@@ -23,7 +22,7 @@ import 'theme/window_size_class.dart';
 /// 首帧永不出现而窗口无法显示。改为从 exe 同目录显式加载。
 ExternalLibrary? _resolveRustLib() {
   if (Platform.isWindows) {
-    return ExternalLibrary(DynamicLibrary.open('emote_core.dll'));
+    return ExternalLibrary.open('emote_core.dll');
   }
   // Linux / Android / Web 保持 flutter_rust_bridge 默认加载方式。
   return null;
