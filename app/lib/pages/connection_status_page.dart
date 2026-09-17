@@ -1,9 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide ConnectionState;
 
 import '../services/connection_service.dart';
-import '../src/rust/protocol/message.dart';
 import '../src/rust/protocol/types.dart';
 import '../src/rust/transport.dart';
 import '../theme/app_theme.dart';
@@ -150,7 +149,6 @@ class _ConnectionStatusPageState extends State<ConnectionStatusPage> {
   }
 
   Widget _buildDetailCard(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final device = widget.device;
 
     return Card(
@@ -180,7 +178,6 @@ class _ConnectionStatusPageState extends State<ConnectionStatusPage> {
   }
 
   Widget _buildHeartbeatCard(BuildContext context, bool connected) {
-    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(spacingX3),
@@ -204,7 +201,7 @@ class _ConnectionStatusPageState extends State<ConnectionStatusPage> {
             _HeartbeatRow(
               label: '已接收',
               value: '$_heartbeatsReceived',
-              icon: Icons.inbound,
+              icon: Icons.inbox,
             ),
             const SizedBox(height: spacingX1),
             _HeartbeatRow(

@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - 'Dev-*'
   workflow_dispatch:
 
 env:
@@ -273,6 +274,17 @@ jobs:
             -o -name '*.apk' -o -name '*.tar.gz' -o -name '*.zip' \) 2>/dev/null || true)
           echo "共 ${#FILES[@]} 个发布文件："
           printf '  %s\n' "${FILES[@]}"
+          # Release 说明：优先使用 .github/release-notes/<tag>.md，缺失时回退到通用文案
+          NOTES_FILE=".github/release-notes/${GITHUB_REF_NAME}.md"
+          NOTES_ARGS=()
+          if [ -f "$NOTES_FILE" ]; then
+            NOTES_ARGS+=( --notes-file "$NOTES_FILE" )
+            echo "使用 Release 说明文件：$NOTES_FILE"
+          else
+            NOTES_ARGS+=( --notes "自动构建发布（Windows / Linux / Android）。Linux 提供 AppImage（尽力而为）与 tar.gz 发布包。" )
+          fi
+          # 标题统一为 Emote <tag>（如 Emote Dev-2.0）
+          RELEASE_TITLE="Emote ${GITHUB_REF_NAME}"
           # 已存在 Release（重试/再次运行）时改为上传，避免 "already exists"
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             echo "Release ${GITHUB_REF_NAME} 已存在，上传文件到现有 Release"
@@ -280,6 +292,6 @@ jobs:
           else
             echo "创建新 Release ${GITHUB_REF_NAME}"
             gh release create "$GITHUB_REF_NAME" "${FILES[@]}" \
-              --title "Emote ${GITHUB_REF_NAME}" \
-              --notes "自动构建发布（Windows / Linux / Android）。Linux 提供 AppImage（尽力而为）与 tar.gz 发布包。"
+              --title "$RELEASE_TITLE" \
+              "${NOTES_ARGS[@]}"
           fi

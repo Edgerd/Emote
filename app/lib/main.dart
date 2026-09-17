@@ -22,9 +22,15 @@ import 'theme/window_size_class.dart';
 /// 首帧永不出现而窗口无法显示。改为从 exe 同目录显式加载。
 ExternalLibrary? _resolveRustLib() {
   if (Platform.isWindows) {
+    // Windows：DLL 与可执行文件同目录。
     return ExternalLibrary.open('emote_core.dll');
   }
-  // Linux / Android / Web 保持 flutter_rust_bridge 默认加载方式。
+  if (Platform.isLinux) {
+    // Linux：libemote_core.so 打进 bundle 的 lib/ 目录，CMake 已设置
+    // RPATH $ORIGIN/lib，dlopen 按文件名可解析到。
+    return ExternalLibrary.open('libemote_core.so');
+  }
+  // Android / Web 保持 flutter_rust_bridge 默认加载方式。
   return null;
 }
 

@@ -1,17 +1,31 @@
-# emote
+# Emote · Flutter 应用 `app/`
 
-A new Flutter project.
+三端（Windows / Linux / Android）共用的 Flutter UI，与 Rust 核心 `emote_core`（`../rust/emote_core`）通过 `flutter_rust_bridge` 通信。
 
-## Getting Started
+## 结构
 
-This project is a starting point for a Flutter application.
+```text
+lib/
+├── main.dart              # 应用入口，加载 Rust 动态库
+├── pages/                 # 设备列表 / 连接状态 / 设置
+├── services/              # 发现 / 连接 / Android 权限
+├── src/rust/              # FRB 生成的绑定
+└── theme/                 # Material 3 主题与桌面适配
+```
 
-A few resources to get you started if this is your first Flutter project:
+## 构建
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+> 先回到仓库根目录生成 FFI 绑定、编译核心库，再在本目录构建应用。详见根目录 [README](../README.md)。
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```sh
+# 依赖安装
+flutter pub get
+
+# 静态检查
+flutter analyze
+
+# 构建
+flutter build linux --release
+flutter build windows --release
+flutter build apk --release
+```

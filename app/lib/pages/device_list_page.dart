@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide ConnectionState;
 
 import '../services/connection_service.dart';
 import '../services/discovery_service.dart';
@@ -226,7 +226,7 @@ class _DeviceListPageState extends State<DeviceListPage> {
         padding: const EdgeInsets.fromLTRB(spacingX3, spacingX2, spacingX3, spacingX4),
         sliver: SliverList.separated(
           itemCount: devices.length,
-          separatorBuilder: (_, __) => const SizedBox(height: spacingX2),
+          separatorBuilder: (_, _) => const SizedBox(height: spacingX2),
           itemBuilder: (context, index) => _DeviceCard(
             device: devices[index],
             connectionService: _connections,
@@ -251,7 +251,6 @@ class _DeviceListPageState extends State<DeviceListPage> {
       case DiscoveryState.error:
         return ('发现出错', Icons.error_outline, scheme.errorContainer);
       case DiscoveryState.stopped:
-      default:
         return ('未在扫描', Icons.radar, scheme.surfaceContainerHighest);
     }
   }
@@ -271,7 +270,6 @@ class _DeviceCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final connState = connectionService.stateOf(device.id);
     final connected = connState == ConnectionState.connected;
 

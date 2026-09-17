@@ -29,7 +29,7 @@ class DiscoveryService extends ChangeNotifier {
   DiscoveryState _state = DiscoveryState.stopped;
   String? _error;
   Timer? _timer;
-  int _pollIntervalMs = 2000;
+  final int _pollIntervalMs = 2000;
   bool _multicastEnabled = false;
 
   DiscoveryHandle? get handle => _handle;

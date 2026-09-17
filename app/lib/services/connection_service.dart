@@ -22,7 +22,7 @@ class ConnectionService extends ChangeNotifier {
   final Map<String, ConnectionState> _states = {};
   final Map<String, ActiveTransport?> _transports = {};
   Timer? _timer;
-  int _pollIntervalMs = 1000;
+  final int _pollIntervalMs = 1000;
   bool _initialized = false;
 
   ConnectionHandle? get handle => _handle;
