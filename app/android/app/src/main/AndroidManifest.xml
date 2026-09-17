@@ -1,4 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 网络访问：mDNS 广播/浏览、QUIC/TCP 连接都需要网络能力 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 局域网通信（mDNS）通常要求 Wi-Fi 状态；判断当前网络是否可用 -->
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <!-- 允许修改 Wi-Fi 组播状态：mDNS 通过 UDP 组播（224.0.0.251:5353）发现设备，
+         需要 MulticastLock 才能持续接收组播包 -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
     <application
         android:label="Emote"
         android:name="${applicationName}"

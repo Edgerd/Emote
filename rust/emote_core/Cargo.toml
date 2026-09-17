@@ -18,10 +18,20 @@ name = "emote_core"
 # flutter_rust_bridge 2.x 运行时支持；版本与工具链清单锁定一致（frb_codegen 2.13.0）。
 flutter_rust_bridge = "=2.13.0"
 
-# ---- 后续分段将以 feature 开关逐段启用，本期不引入以保持只暴露 greet ----
-# quinn    = "0.11.11"   # 默认传输层 QUIC（第 1.5 段 transport/quic.rs）
-# tokio    = { version = "1", features = ["net"] }          # TCP 回退（第 1.5 段 transport/tcp.rs）
-# bytes    = "1.12.1"    # 零拷贝 buffer（性能工程）
+# ---- 第 2 段：设备发现 + 双传输层连接（最小可行框架）----
+serde = { version = "1.0", features = ["derive"] }  # 统一消息/设备结构体序列化
+uuid = { version = "1.12", features = ["v4", "serde"] } # 设备唯一 ID（UUID v4）
+mdns-sd = "0.11"                                      # 第2.2段 mDNS 广播与发现
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "io-util"] }
+quinn = "0.11.11"                                     # 第2.3段默认传输层 QUIC
+rcgen = "0.14"                                        # 第2.3段 QUIC 服务端自签证书（LAN 对等端）
+bytes = "1.12.1"                                      # 第2.3段零拷贝 buffer / 统一消息头
+anyhow = "1"                                          # 错误统一
+futures = "0.3"                                       # QUIC async 并发
+dashmap = "6"                                         # 连接管理器并发容器
+tracing = "0.1"                                       # 诊断日志（轻量）
+
+# ---- 后续分段将以 feature 开关逐段启用 ----
 # reis     = { version = "=0.7.0", features = ["tokio"] }   # Linux 输入注入（libei，按需）
 # ffmpeg-next = { version = "=8.1.0", optional = true }     # 可选软件解码（第 4.3 段）
 

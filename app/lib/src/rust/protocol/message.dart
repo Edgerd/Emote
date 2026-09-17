@@ -9,11 +9,19 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
             
 
-            /// 返回一条问候语，证明 Dart 能同步拿到 Rust 的返回值。
-///
-/// 修改此处返回值并重新运行 `flutter_rust_bridge_codegen generate`，
-/// Flutter 侧 `greet` 的返回将同步变化。
-Future<String>  greet({required String name }) => RustLib.instance.api.crateApiSimpleGreet(name: name);
-
             
+
+            /// 统一消息类型。
+enum MessageType {
+                    /// 心跳（双向）。
+heartbeat,
+/// 通用控制消息（如握手、会话协商）。
+control,
+/// 视频数据流（第 3 段起使用）。
+video,
+/// 输入注入命令（第 3 段起使用）。
+input,
+                    ;
+                    
+                }
             

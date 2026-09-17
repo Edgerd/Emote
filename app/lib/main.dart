@@ -7,7 +7,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
 
 import 'package:emote/src/rust/frb_generated.dart';
 
-import 'pages/home_page.dart';
+import 'pages/device_list_page.dart';
 import 'pages/settings_page.dart';
 import 'services/settings_controller.dart';
 import 'theme/app_theme.dart';
@@ -104,7 +104,7 @@ class _AppShellState extends State<AppShell> {
     final sizeClass = WindowSizeClassResolver.of(context);
     final desktop = sizeClass.isDesktopClass;
 
-    final body = _index == 0 ? const HomePage() : const SettingsPage();
+    final body = _index == 0 ? const DeviceListPage() : const SettingsPage();
 
     final destinations = const [
       NavigationDestination(

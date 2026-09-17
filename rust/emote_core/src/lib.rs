@@ -14,6 +14,8 @@
 pub mod api;
 mod frb_generated; // 由 flutter_rust_bridge_codegen 自动生成的 FFI 桥接入口
 
+/// 跨语言统一协议与数据结构（第 2.1 段）：设备信息、状态枚举、心跳、消息头。
+pub mod protocol;
 pub mod discovery;
 pub mod connection;
 pub mod transport;

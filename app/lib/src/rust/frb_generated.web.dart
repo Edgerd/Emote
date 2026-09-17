@@ -3,87 +3,249 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+
 // Static analysis wrongly picks the IO variant, thus ignore this
 // ignore_for_file: argument_type_not_assignable
 
+import 'api/connection.dart';
+import 'api/discovery.dart';
 import 'api/simple.dart';
-
 import 'dart:async';
 import 'dart:convert';
-
 import 'frb_generated.dart';
-
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated_web.dart';
+import 'protocol/message.dart';
+import 'protocol/types.dart';
+import 'transport.dart';
 
-abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
-  RustLibApiImplPlatform({
-    required super.handler,
-    required super.wire,
-    required super.generalizedFrbRustBinding,
-    required super.portManager,
-  });
 
-  @protected
-  String dco_decode_String(dynamic raw);
 
-  @protected
-  Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
-  @protected
-  int dco_decode_u_8(dynamic raw);
+                abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
+                  RustLibApiImplPlatform({
+                    required super.handler,
+                    required super.wire,
+                    required super.generalizedFrbRustBinding,
+                    required super.portManager,
+                  });
 
-  @protected
-  void dco_decode_unit(dynamic raw);
+                  CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_ConnectionHandlePtr => wire.rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle;
 
-  @protected
-  String sse_decode_String(SseDeserializer deserializer);
+CrossPlatformFinalizerArg get rust_arc_decrement_strong_count_DiscoveryHandlePtr => wire.rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle;
 
-  @protected
-  Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
-  @protected
-  int sse_decode_u_8(SseDeserializer deserializer);
 
-  @protected
-  void sse_decode_unit(SseDeserializer deserializer);
+                  @protected AnyhowException dco_decode_AnyhowException(dynamic raw);
 
-  @protected
-  int sse_decode_i_32(SseDeserializer deserializer);
+@protected ConnectionHandle dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(dynamic raw);
 
-  @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
+@protected DiscoveryHandle dco_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(dynamic raw);
 
-  @protected
-  void sse_encode_String(String self, SseSerializer serializer);
+@protected DiscoveryHandle dco_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(dynamic raw);
 
-  @protected
-  void sse_encode_list_prim_u_8_strict(
-    Uint8List self,
-    SseSerializer serializer,
-  );
+@protected ConnectionHandle dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(dynamic raw);
 
-  @protected
-  void sse_encode_u_8(int self, SseSerializer serializer);
+@protected DiscoveryHandle dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(dynamic raw);
 
-  @protected
-  void sse_encode_unit(void self, SseSerializer serializer);
+@protected ConnectionHandle dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(dynamic raw);
 
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer);
+@protected DiscoveryHandle dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(dynamic raw);
 
-  @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
-}
+@protected String dco_decode_String(dynamic raw);
+
+@protected ActiveTransport dco_decode_active_transport(dynamic raw);
+
+@protected bool dco_decode_bool(dynamic raw);
+
+@protected ActiveTransport dco_decode_box_autoadd_active_transport(dynamic raw);
+
+@protected BroadcastConfig dco_decode_box_autoadd_broadcast_config(dynamic raw);
+
+@protected DeviceInfo dco_decode_box_autoadd_device_info(dynamic raw);
+
+@protected BroadcastConfig dco_decode_broadcast_config(dynamic raw);
+
+@protected ConnectionState dco_decode_connection_state(dynamic raw);
+
+@protected DeviceInfo dco_decode_device_info(dynamic raw);
+
+@protected DeviceSystem dco_decode_device_system(dynamic raw);
+
+@protected DiscoveryState dco_decode_discovery_state(dynamic raw);
+
+@protected int dco_decode_i_32(dynamic raw);
+
+@protected List<DeviceInfo> dco_decode_list_device_info(dynamic raw);
+
+@protected List<int> dco_decode_list_prim_u_8_loose(dynamic raw);
+
+@protected Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+
+@protected List<Transport> dco_decode_list_transport(dynamic raw);
+
+@protected MessageType dco_decode_message_type(dynamic raw);
+
+@protected ActiveTransport? dco_decode_opt_box_autoadd_active_transport(dynamic raw);
+
+@protected Transport dco_decode_transport(dynamic raw);
+
+@protected int dco_decode_u_16(dynamic raw);
+
+@protected int dco_decode_u_8(dynamic raw);
+
+@protected void dco_decode_unit(dynamic raw);
+
+@protected BigInt dco_decode_usize(dynamic raw);
+
+@protected AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
+
+@protected ConnectionHandle sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(SseDeserializer deserializer);
+
+@protected DiscoveryHandle sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(SseDeserializer deserializer);
+
+@protected DiscoveryHandle sse_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(SseDeserializer deserializer);
+
+@protected ConnectionHandle sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(SseDeserializer deserializer);
+
+@protected DiscoveryHandle sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(SseDeserializer deserializer);
+
+@protected ConnectionHandle sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(SseDeserializer deserializer);
+
+@protected DiscoveryHandle sse_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(SseDeserializer deserializer);
+
+@protected String sse_decode_String(SseDeserializer deserializer);
+
+@protected ActiveTransport sse_decode_active_transport(SseDeserializer deserializer);
+
+@protected bool sse_decode_bool(SseDeserializer deserializer);
+
+@protected ActiveTransport sse_decode_box_autoadd_active_transport(SseDeserializer deserializer);
+
+@protected BroadcastConfig sse_decode_box_autoadd_broadcast_config(SseDeserializer deserializer);
+
+@protected DeviceInfo sse_decode_box_autoadd_device_info(SseDeserializer deserializer);
+
+@protected BroadcastConfig sse_decode_broadcast_config(SseDeserializer deserializer);
+
+@protected ConnectionState sse_decode_connection_state(SseDeserializer deserializer);
+
+@protected DeviceInfo sse_decode_device_info(SseDeserializer deserializer);
+
+@protected DeviceSystem sse_decode_device_system(SseDeserializer deserializer);
+
+@protected DiscoveryState sse_decode_discovery_state(SseDeserializer deserializer);
+
+@protected int sse_decode_i_32(SseDeserializer deserializer);
+
+@protected List<DeviceInfo> sse_decode_list_device_info(SseDeserializer deserializer);
+
+@protected List<int> sse_decode_list_prim_u_8_loose(SseDeserializer deserializer);
+
+@protected Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+
+@protected List<Transport> sse_decode_list_transport(SseDeserializer deserializer);
+
+@protected MessageType sse_decode_message_type(SseDeserializer deserializer);
+
+@protected ActiveTransport? sse_decode_opt_box_autoadd_active_transport(SseDeserializer deserializer);
+
+@protected Transport sse_decode_transport(SseDeserializer deserializer);
+
+@protected int sse_decode_u_16(SseDeserializer deserializer);
+
+@protected int sse_decode_u_8(SseDeserializer deserializer);
+
+@protected void sse_decode_unit(SseDeserializer deserializer);
+
+@protected BigInt sse_decode_usize(SseDeserializer deserializer);
+
+@protected void sse_encode_AnyhowException(AnyhowException self, SseSerializer serializer);
+
+@protected void sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(ConnectionHandle self, SseSerializer serializer);
+
+@protected void sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(DiscoveryHandle self, SseSerializer serializer);
+
+@protected void sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(DiscoveryHandle self, SseSerializer serializer);
+
+@protected void sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(ConnectionHandle self, SseSerializer serializer);
+
+@protected void sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(DiscoveryHandle self, SseSerializer serializer);
+
+@protected void sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(ConnectionHandle self, SseSerializer serializer);
+
+@protected void sse_encode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(DiscoveryHandle self, SseSerializer serializer);
+
+@protected void sse_encode_String(String self, SseSerializer serializer);
+
+@protected void sse_encode_active_transport(ActiveTransport self, SseSerializer serializer);
+
+@protected void sse_encode_bool(bool self, SseSerializer serializer);
+
+@protected void sse_encode_box_autoadd_active_transport(ActiveTransport self, SseSerializer serializer);
+
+@protected void sse_encode_box_autoadd_broadcast_config(BroadcastConfig self, SseSerializer serializer);
+
+@protected void sse_encode_box_autoadd_device_info(DeviceInfo self, SseSerializer serializer);
+
+@protected void sse_encode_broadcast_config(BroadcastConfig self, SseSerializer serializer);
+
+@protected void sse_encode_connection_state(ConnectionState self, SseSerializer serializer);
+
+@protected void sse_encode_device_info(DeviceInfo self, SseSerializer serializer);
+
+@protected void sse_encode_device_system(DeviceSystem self, SseSerializer serializer);
+
+@protected void sse_encode_discovery_state(DiscoveryState self, SseSerializer serializer);
+
+@protected void sse_encode_i_32(int self, SseSerializer serializer);
+
+@protected void sse_encode_list_device_info(List<DeviceInfo> self, SseSerializer serializer);
+
+@protected void sse_encode_list_prim_u_8_loose(List<int> self, SseSerializer serializer);
+
+@protected void sse_encode_list_prim_u_8_strict(Uint8List self, SseSerializer serializer);
+
+@protected void sse_encode_list_transport(List<Transport> self, SseSerializer serializer);
+
+@protected void sse_encode_message_type(MessageType self, SseSerializer serializer);
+
+@protected void sse_encode_opt_box_autoadd_active_transport(ActiveTransport? self, SseSerializer serializer);
+
+@protected void sse_encode_transport(Transport self, SseSerializer serializer);
+
+@protected void sse_encode_u_16(int self, SseSerializer serializer);
+
+@protected void sse_encode_u_8(int self, SseSerializer serializer);
+
+@protected void sse_encode_unit(void self, SseSerializer serializer);
+
+@protected void sse_encode_usize(BigInt self, SseSerializer serializer);
+                }
+                
+
 
 // Section: wire_class
 
 class RustLibWire implements BaseWire {
-  RustLibWire.fromExternalLibrary(ExternalLibrary lib);
-}
+            RustLibWire.fromExternalLibrary(ExternalLibrary lib);
 
-@JS('wasm_bindgen')
-external RustLibWasmModule get wasmModule;
+            void rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(int ptr) => wasmModule.rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(ptr);
 
-@JS()
-@anonymous
-extension type RustLibWasmModule._(JSObject _) implements JSObject {}
+void rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(int ptr) => wasmModule.rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(ptr);
+
+void rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(int ptr) => wasmModule.rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(ptr);
+
+void rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(int ptr) => wasmModule.rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(ptr);
+        }
+        @JS('wasm_bindgen') external RustLibWasmModule get wasmModule;
+
+        @JS() @anonymous extension type RustLibWasmModule._(JSObject _) implements JSObject {
+            external void rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(int ptr);
+
+external void rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerConnectionHandle(int ptr);
+
+external void rust_arc_increment_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(int ptr);
+
+external void rust_arc_decrement_strong_count_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDiscoveryHandle(int ptr);
+        }
+        
