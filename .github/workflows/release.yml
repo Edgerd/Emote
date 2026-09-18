@@ -65,9 +65,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: |
-            app/build/windows/x64/runner/Release/
-            app/build/windows/emote-windows-x86_64.zip
+          path: app/build/windows/emote-windows-x86_64.zip
 
   build-linux:
     runs-on: ubuntu-latest
@@ -268,10 +266,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # 汇总三端可运行产物（exe/dll/AppImage/apk/tar.gz/zip）
+          # 汇总三端可运行产物：仅打包后的归档（zip / tar.gz / AppImage / apk）。
+          # 注意：不要匹配 *.exe / *.dll，避免把 Release 目录里未打包的
+          # emote.exe、emote_core.dll、dynamic_color_plugin.dll、flutter_windows.dll
+          # 等单个文件上传到 Release。
           mapfile -t FILES < <(find release-artifacts -type f \( \
-            -name '*.exe' -o -name '*.dll' -o -name '*.AppImage' \
-            -o -name '*.apk' -o -name '*.tar.gz' -o -name '*.zip' \) 2>/dev/null || true)
+            -name '*.AppImage' -o -name '*.apk' \
+            -o -name '*.tar.gz' -o -name '*.zip' \) 2>/dev/null || true)
           echo "共 ${#FILES[@]} 个发布文件："
           printf '  %s\n' "${FILES[@]}"
           # Release 说明：优先使用 .github/release-notes/<tag>.md，缺失时回退到通用文案

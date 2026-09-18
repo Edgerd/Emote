@@ -39,7 +39,9 @@ impl DiscoveryService {
         info!(name=%config.name, ip=%host_ip, "mDNS 服务广播启动");
         let daemon = ServiceDaemon::new().map_err(|e| anyhow::anyhow!("mDNS 启动失败: {e}"))?;
 
-        let host_name = format!("{}.local", config.name.replace(' ', "-"));
+        // mdns-sd 的 check_hostname 要求主机名以 ".local."（带末尾点）结尾，
+        // 否则 register 会报 "Hostname must end with '.local.'"。
+        let host_name = format!("{}.local.", config.name.replace(' ', "-"));
         let mut registered_fullnames = Vec::new();
 
         // ---- QUIC 服务（_emote._udp.local.）----
