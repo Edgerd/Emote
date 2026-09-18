@@ -9,6 +9,7 @@ import 'package:emote/src/rust/frb_generated.dart';
 
 import 'pages/device_list_page.dart';
 import 'pages/settings_page.dart';
+import 'services/harmony_font_loader.dart';
 import 'services/settings_controller.dart';
 import 'theme/app_theme.dart';
 import 'theme/dynamic_color.dart';
@@ -63,25 +64,43 @@ class EmoteApp extends StatelessWidget {
     return ListenableBuilder(
       listenable: settings,
       builder: (context, _) {
-        // Android：用 DynamicColorBuilder 从系统壁纸异步汲取 Material You 色板。
+        // 开启动态颜色只负责更换色板（Material You），绝不决定深浅色状态。
+        // 深浅色由 settings.mode 独立控制；若动态色未启用或桌面端无可汲取，
+        // 则 dynamicScheme 为 null，回退到 fallbackSeed 生成的固定色板。
         return DynamicColorBuilder(
           builder: (lightDynamic, darkDynamic) {
-            final ColorScheme? dynamicScheme =
-                settings.dynamicColorEnabled ? (lightDynamic ?? darkDynamic) : null;
+            // 浅色主题：优先汲取系统浅色壁纸色。
+            final ColorScheme? lightScheme = settings.dynamicColorEnabled
+                ? (lightDynamic ?? darkDynamic)
+                : null;
+            // 深色主题：优先汲取系统深色壁纸色。
+            final ColorScheme? darkScheme = settings.dynamicColorEnabled
+                ? (darkDynamic ?? lightDynamic)
+                : null;
+
+            // 万一 HarmonyOS 字体尚未下载完成，回退系统默认字体（不会阻塞首帧）。
+            final String? fontFamily =
+                FontManager().isReady ? FontManager().fontFamily : null;
 
             return MaterialApp(
               title: 'Emote',
               debugShowCheckedModeBanner: false,
-              theme: AppTheme.build(PlatformAccent.resolve(
-                brightness: Brightness.light,
-                dynamicScheme: dynamicScheme,
-                fallbackSeed: settings.seedColor,
-              )),
-              darkTheme: AppTheme.build(PlatformAccent.resolve(
-                brightness: Brightness.dark,
-                dynamicScheme: dynamicScheme,
-                fallbackSeed: settings.seedColor,
-              )),
+              theme: AppTheme.build(
+                PlatformAccent.resolve(
+                  brightness: Brightness.light,
+                  dynamicScheme: lightScheme,
+                  fallbackSeed: settings.seedColor,
+                ),
+                fontFamily: fontFamily,
+              ),
+              darkTheme: AppTheme.build(
+                PlatformAccent.resolve(
+                  brightness: Brightness.dark,
+                  dynamicScheme: darkScheme,
+                  fallbackSeed: settings.seedColor,
+                ),
+                fontFamily: fontFamily,
+              ),
               themeMode: settings.mode,
               home: const AppShell(),
             );
