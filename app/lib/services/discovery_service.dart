@@ -31,9 +31,26 @@ class DiscoveryService extends ChangeNotifier {
   Timer? _timer;
   final int _pollIntervalMs = 2000;
   bool _multicastEnabled = false;
+  String? _localDeviceId;
 
   DiscoveryHandle? get handle => _handle;
-  List<DeviceInfo> get devices => _devices;
+
+  /// 对外设备列表：**过滤掉本机自己广播的服务**（不应连“自己”）。
+  ///
+  /// 自发现能力仍保留：见 [allDevices]，用于无真机时的自测。
+  List<DeviceInfo> get devices =>
+      _devices.where((d) => !isSelfDevice(d.id)).toList();
+
+  /// 原始设备列表（含本机自身），保留自发现在无真机时的自测能力。
+  List<DeviceInfo> get allDevices => _devices;
+
+  /// 该 id 是否是本机自己广播的设备。
+  bool isSelfDevice(String id) =>
+      id.isNotEmpty && _localDeviceId != null && id == _localDeviceId;
+
+  /// 本机广播时使用的设备 ID（可用于 UI 标注自发现项）。
+  String? get localDeviceId => _localDeviceId;
+
   DiscoveryState get state => _state;
   bool get running => _state == DiscoveryState.running;
   String? get error => _error;
@@ -60,6 +77,7 @@ class DiscoveryService extends ChangeNotifier {
       final id = (deviceId == null || deviceId.isEmpty)
           ? generateDeviceId()
           : deviceId;
+      _localDeviceId = id;
       final ip = hostIp ?? (await _detectLanHostIp()) ?? '127.0.0.1';
 
       final handle = await DiscoveryHandle.newInstance();

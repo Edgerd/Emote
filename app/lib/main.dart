@@ -109,6 +109,13 @@ class EmoteApp extends StatelessWidget {
               ),
               themeMode: settings.mode,
               home: const AppShell(),
+              // 在 Navigator 上层叠加字体下载进度条：出现/消失时淡入淡出。
+              builder: (context, child) => Stack(
+                children: [
+                  if (child != null) child,
+                  const _FontDownloadOverlay(),
+                ],
+              ),
             );
           },
         );
@@ -196,5 +203,116 @@ class _AppShellState extends State<AppShell> {
 
     // 桌面端：NavigationRail + AppBar；移动端：底部 NavigationBar。
     return scaffold;
+  }
+}
+
+/// 字体包下载进度浮层：随 [FontManager.isDownloading] 状态**淡入淡出**。
+///
+/// - 未下载：完全透明、不拦截任何手势；
+/// - 开始下载：淡入，显示 进度条 + 百分比 + 已下载/总大小；
+/// - 下载结束：淡出后不可见（控件仍驻留以保证退场动画完整播放）。
+class _FontDownloadOverlay extends StatelessWidget {
+  const _FontDownloadOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    final mgr = FontManager();
+    return AnimatedBuilder(
+      animation: mgr,
+      builder: (context, _) {
+        final downloading = mgr.isDownloading;
+        final hasProgress = mgr.downloadProgress >= 0;
+        final p = mgr.downloadProgress;
+
+        return Align(
+          alignment: Alignment.topCenter,
+          child: SafeArea(
+            child: IgnorePointer(
+              ignoring: !downloading,
+              child: AnimatedOpacity(
+                opacity: downloading ? 1 : 0,
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeOut,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 10),
+                  child: _FontProgressCard(
+                    hasProgress: hasProgress,
+                    progress: p,
+                    label: mgr.formatProgressLabel(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 进度卡片主体。
+class _FontProgressCard extends StatelessWidget {
+  const _FontProgressCard({
+    required this.hasProgress,
+    required this.progress,
+    required this.label,
+  });
+
+  final bool hasProgress;
+  final double progress;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final value = hasProgress ? progress.clamp(0.0, 1.0).toDouble() : null;
+    final pct = value == null ? null : (value * 100).round();
+
+    return Material(
+      elevation: 4,
+      borderRadius: BorderRadius.circular(12),
+      color: scheme.surfaceContainerHigh,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: SizedBox(
+          width: 320,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.downloading, size: 20, color: scheme.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('正在下载中文字体…',
+                        style: Theme.of(context).textTheme.labelLarge),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: value,
+                  minHeight: 5,
+                  backgroundColor: scheme.surfaceContainerHighest,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                pct == null
+                    ? (label.isEmpty ? '准备中…' : '已下载 $label')
+                    : '$pct%  ·  $label',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

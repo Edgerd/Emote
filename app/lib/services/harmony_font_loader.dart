@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:archive/archive_io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -11,19 +12,28 @@ import 'package:path_provider/path_provider.dart';
 ///
 /// 背景：Windows 7 用兼容层运行、或系统缺少中文字体时，Flutter 自带 Roboto
 /// 没有 CJK 字形，中文会整体消失、只剩英文。解决办法：应用启动后后台下载
-/// 华为 HarmonyOS Sans 并动态注册，让中文能正常渲染。
+/// 华为 HarmonyOS Sans 并动态注册，让中文能正常渲染（win7 中文不再显示方框）。
 ///
-/// 规则：
-/// 1. 若已解压过字体，则直接使用缓存（无需联网）；
-/// 2. 否则后台下载 zip 并解压到应用资源目录（ApplicationSupport）；
-/// 3. 下载/解压失败或超时 → 回退系统默认字体（不做任何覆盖）；
-/// 4. 加载成功后通过 [fontFamily] 暴露，触发主题重建。
+/// 规则（内存 / 存储 / 网络友好）：
+/// 1. 若已解压过字体（缓存命中），直接用缓存，**不重复下载**（避免反复拉取约 50MB 包）；
+/// 2. 否则后台**流式**下载 zip 到临时文件（按块写盘，而非一次性整包进内存），
+///    通过 [downloadProgress] 实时暴露进度供 UI 淡入淡出展示；
+/// 3. 从临时 zip 解密到应用资源目录后**立即删除该临时 zip**，不占用多余磁盘；
+/// 4. 下载/解压失败或超时 → 回退系统默认字体（不做任何覆盖）；
+/// 5. 加载成功后通过 [fontFamily] 暴露，触发主题重建。
 class FontManager extends ChangeNotifier {
   FontManager._();
 
   /// 当前应使用的字体族；null 表示使用系统默认字体。
   String? _fontFamily;
   bool _loading = false;
+
+  // ---- 下载进度状态（供 UI 淡入淡出展示）----
+  bool _downloading = false;
+  double _progress = 0; // 0..1；<0 表示总长未知（不确定进度）
+  int _downloadedBytes = 0;
+  int _totalBytes = 0;
+  final Stopwatch _reportGauge = Stopwatch()..start();
 
   static final FontManager _instance = FontManager._();
   factory FontManager() => _instance;
@@ -32,9 +42,21 @@ class FontManager extends ChangeNotifier {
   bool get isReady => _fontFamily != null;
   bool get isLoading => _loading;
 
+  /// 是否正在下载字体分发包。
+  bool get isDownloading => _downloading;
+
+  /// 下载进度 0..1；返回 -1 表示总大小未知（显示不确定进度）。
+  double get downloadProgress => _progress;
+
+  /// 已下载字节数。
+  int get downloadedBytes => _downloadedBytes;
+
+  /// 应答头里的总字节数（可能为 0，表示未知）。
+  int get totalBytes => _totalBytes;
+
   static const String kDownloadUrl =
       'https://developer.huawei.com/images/download/general/HarmonyOS-Sans.zip';
-  static const Duration kTimeout = Duration(seconds: 30);
+  static const Duration kTimeout = Duration(seconds: 60);
   static const String kHarmonyFamily = 'HarmonyOS Sans';
 
   /// 解析并加载 HarmonyOS Sans（幂等；失败即回退，永不抛错）。
@@ -51,40 +73,63 @@ class FontManager extends ChangeNotifier {
       debugPrint('Harmony 字体加载失败，回退系统字体：$e');
     } finally {
       _loading = false;
+      _setDownloading(false);
       notifyListeners();
     }
+  }
+
+  /// 设置下载状态并立即通知（进入时置零，供 UI 淡入）。
+  void _enterDownloading() {
+    _downloading = true;
+    _downloadedBytes = 0;
+    _totalBytes = 0;
+    _progress = -1;
+    _reportGauge
+      ..reset()
+      ..start();
+    notifyListeners();
+  }
+
+  void _setDownloading(bool v) {
+    if (_downloading == v) return;
+    _downloading = v;
+    notifyListeners();
   }
 
   Future<String?> _load() async {
     final dir = await getApplicationSupportDirectory();
     final fontDir = Directory('${dir.path}/harmony_sans');
 
-    // 1) 已有缓存则直接用。
+    // 1) 已有缓存（上次下载并解压成功）则直接用，不再二次下载。
     final cached = await _ensureCjkDirectory(fontDir);
     if (cached != null) {
       await _registerCjk(cached);
       return kHarmonyFamily;
     }
 
-    // 2) 下载 zip，带超时；失败抛错走回退。
-    final bytes = await _download(kDownloadUrl, kTimeout);
-
-    // 3) 解压到资源目录（覆盖旧缓存）。
+    // 2) 流式下载 zip 到临时文件（带进度、超时）；失败走回退。
+    _enterDownloading();
+    final zip = await _downloadToTempFile(kDownloadUrl, kTimeout);
     try {
+      // 3) 解压到资源目录（覆盖旧缓存）。
       if (fontDir.existsSync()) fontDir.deleteSync(recursive: true);
       fontDir.createSync(recursive: true);
-      _unzip(bytes, fontDir.path);
-    } catch (e) {
-      // 解压失败：清理半成品，回退系统字体。
-      if (fontDir.existsSync()) fontDir.deleteSync(recursive: true);
-      rethrow;
-    }
+      _unzipFromFile(zip, fontDir.path);
 
-    // 4) 注册 CJK 字体；包内若无中文字体则静默回退。
-    final scDir = await _ensureCjkDirectory(fontDir);
-    if (scDir == null) return null;
-    await _registerCjk(scDir);
-    return kHarmonyFamily;
+      // 若包内无 CJK 字体目录，清理垃圾并回退。
+      final scDir = await _ensureCjkDirectory(fontDir);
+      if (scDir == null) {
+        if (fontDir.existsSync()) fontDir.deleteSync(recursive: true);
+        return null;
+      }
+      await _registerCjk(scDir);
+      return kHarmonyFamily;
+    } finally {
+      // 4) 存储优化：解压后立即删除临时 zip（约 50MB），不落盘缓存。
+      try {
+        if (zip.existsSync()) zip.deleteSync();
+      } catch (_) {}
+    }
   }
 
   /// 递归查找并确保包含 CJK 字体的目录存在，返回该目录；找不到返回 null。
@@ -155,23 +200,36 @@ class FontManager extends ChangeNotifier {
     await loader.load();
   }
 
-  /// 将 zip 字节解压到 [outDir]。
-  void _unzip(List<int> bytes, String outDir) {
-    final archive = ZipDecoder().decodeBytes(Uint8List.fromList(bytes));
-    for (final file in archive) {
-      if (!file.isFile) continue;
-      // 防 zip 路径穿越：统一用 / 规范化后拼接到 outDir。
-      final rel = file.name.split('/').join(Platform.pathSeparator);
-      final target = File('$outDir$Platform.pathSeparator$rel');
-      if (!target.path.startsWith(outDir)) continue; // 越界跳过
-      target.parent.createSync(recursive: true);
-      final data = file.content as List<int>;
-      if (data.isNotEmpty) target.writeAsBytesSync(data, flush: true);
+  /// 从已下载的 zip 文件解压到 [outDir]（流式读文件，避免整包驻留内存）。
+  void _unzipFromFile(File zip, String outDir) {
+    final input = InputFileStream(zip.path);
+    try {
+      final archive = ZipDecoder().decodeBuffer(input);
+      for (final file in archive) {
+        if (!file.isFile) continue;
+        // 防 zip 路径穿越：统一用 / 规范化后拼接到 outDir。
+        final rel = file.name.split('/').join(Platform.pathSeparator);
+        final target = File('$outDir$Platform.pathSeparator$rel');
+        if (!target.path.startsWith(outDir)) continue; // 越界跳过
+        target.parent.createSync(recursive: true);
+        final data = file.content as List<int>;
+        if (data.isNotEmpty) target.writeAsBytesSync(data, flush: true);
+      }
+    } finally {
+      input.close();
     }
   }
 
-  /// 带超时与重试的下载，校验为合法 zip 后返回字节。
-  Future<Uint8List> _download(String url, Duration timeout) async {
+  /// 流式下载 zip 到临时文件，边收边写盘（内存占用与包大小解耦），并刷新进度。
+  Future<File> _downloadToTempFile(String url, Duration timeout) async {
+    final dir = await getApplicationSupportDirectory();
+    final tmp = File('${dir.path}/harmony_sans_download.zip');
+    if (tmp.existsSync()) {
+      try {
+        tmp.deleteSync();
+      } catch (_) {}
+    }
+
     final client = HttpClient()
       ..connectionTimeout = timeout
       ..idleTimeout = timeout;
@@ -181,26 +239,70 @@ class FontManager extends ChangeNotifier {
       if (resp.statusCode != 200) {
         throw HttpException('下载字体失败：HTTP ${resp.statusCode}', uri: req.uri);
       }
-      final builder = BytesBuilder(copy: false);
-      await for (final chunk in resp) {
-        builder.add(chunk);
+      final total =
+          int.tryParse(resp.headers.value(HttpHeaders.contentLengthHeader) ?? '') ??
+              0;
+      _downloadedBytes = 0;
+      _totalBytes = total;
+      _progress = total > 0 ? 0 : -1;
+
+      final sink = tmp.openWrite();
+      var received = 0;
+      try {
+        await for (final chunk in resp) {
+          sink.add(chunk);
+          received += chunk.length;
+          _downloadedBytes = received;
+          if (total > 0) {
+            _progress = received / total;
+          }
+          // 节流通知：避免每个数据块都触发 UI 重建。
+          if (_reportGauge.elapsedMilliseconds >= 100) {
+            _reportGauge
+              ..reset()
+              ..start();
+            notifyListeners();
+          }
+        }
+      } finally {
+        await sink.close();
       }
-      final out = builder.takeBytes();
-      // 校验 zip 魔数（PK\x03\x04 / PK\x05\x06 / PK\x07\x08），非法则报错。
-      if (!_isZipBytes(out)) {
+
+      // 校验 zip 魔数（PK\x03\x04 / PK\x05\x06 / PK\x07\x08），非法则删除并报错。
+      if (!(await _isZipFile(tmp))) {
+        try {
+          tmp.deleteSync();
+        } catch (_) {}
         throw const FormatException('下载的字体包不是合法 zip');
       }
-      return Uint8List.fromList(out);
+      return tmp;
     } finally {
       client.close(force: true);
     }
   }
 
-  /// ZIP 文件魔数校验。
-  static bool _isZipBytes(Uint8List bytes) {
-    if (bytes.length < 4) return false;
-    return bytes[0] == 0x50 && bytes[1] == 0x4B && // "PK"
-        (bytes[2] == 0x03 || bytes[2] == 0x05 || bytes[2] == 0x07) &&
-        (bytes[3] == 0x04 || bytes[3] == 0x06 || bytes[3] == 0x08);
+  /// 读取文件头校验 ZIP 魔数。
+  static Future<bool> _isZipFile(File f) async {
+    try {
+      final r = await f.openRead(0, 4).expand((e) => e).toList();
+      if (r.length < 4) return false;
+      return r[0] == 0x50 &&
+          r[1] == 0x4B && // "PK"
+          (r[2] == 0x03 || r[2] == 0x05 || r[2] == 0x07) &&
+          (r[3] == 0x04 || r[3] == 0x06 || r[3] == 0x08);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 格式化已下载 / 总大小（如 “12.0 MB / 49.7 MB”）。
+  String formatProgressLabel() {
+    if (_totalBytes <= 0) return '';
+    return '${_mb(_downloadedBytes)} / ${_mb(_totalBytes)}';
+  }
+
+  static String _mb(int bytes) {
+    final v = bytes / (1024 * 1024);
+    return '${v.toStringAsFixed(1)} MB';
   }
 }

@@ -1,6 +1,6 @@
-# Emote 2.1.1
+# Emote 2.1.0
 
-> **发布通道**：Pre-release（预览版） · **标签**：`Dev-2.0`
+> **发布通道**：Pre-release（预览版） · **标签**：`Dev-2.1`
 > **建议安装**：尝鲜预览版本，主要用于功能迭代验证；生产环境请选用正式版。
 
 ---
@@ -20,35 +20,34 @@
 ## 更新明细
 
 ### 🚀 新特性
-- 完善 Rust 核心 `libemote_core.so` 在 Linux 发布包内的加载与打包（RPATH `$ORIGIN/lib`），Linux 端开箱即用。
-- macOS/iOS 平台加入编译桩（`platform/macos_stub.rs`、`ios_stub.rs`），为后续三端布局预留。
+- 集成 Rust 核心（`emote_core`）与 Flutter 端 FFI 桥接，三端共用设备发现 / 连接协议栈。
+- 基于 mDNS（`mdns-sd`）的局域网设备发现框架：同时广播本机服务并浏览同网段设备。
+- 美化 MD3 设置界面：深浅色 / 动态颜色 / 种子色可配置并持久化。
+- 设备列表页接入发现状态指示（扫描中 / 运行中 / 出错）与单设备连接入口。
 
 ### 🔧 修复
-- 修复 Flutter 侧 `ConnectionState` 命名冲突（`hide ConnectionState`）。
-- 修复 `Icons.inbound` 未定义导致的编译错误（改用 `Icons.inbox`）。
-- 移除未使用变量、不可达 `switch default` 分支，消除 analyzer 告警（`flutter analyze` 0 问题）。
-- 修复 `flutter_rust_bridge_codegen generate` 在 CI 中的工作目录问题。
+- 修复设置页若干交互与状态回显问题。
+- 修复桌面端窗口尺寸自适应与导航栏适配（NavigationRail / NavigationBar 切换）。
 
 ### 📋 其它
-- 发布流水线支持 `Dev-*` 标签触发构建。
-- 应用版本号提升至 `2.1.1`（预览版）。
+- 发布流水线支持 `v*` / `Dev-*` 标签触发三端构建。
+- 应用版本号提升至 `2.1.0`（预览版）。
 
 ---
 
 ## 已知问题
-- Linux/Windows 三端在同一局域网互相发现、心跳长连接保活仍需真机长时间联调验证。
-- AppImage 为「尽力而为」产物，若无法打包则以 tar.gz 为准。
+- Android 模拟器默认 NAT 会过滤 mDNS 组播、扫不到宿主机，需真机或同一桥接网段验证移动端。
 
 ---
 
 ## 下一步计划
 
+- [ ] 修复 mDNS TXT 属性解析，正确显示系统类型 / 端口 / 名称
 - [ ] 实现 Windows ↔ Linux 双向控制
-- [ ] 实现 Android 控制桌面端（自研捕获 + 编码 + 注入）
+- [ ] 实现 Android 控制桌面端
 - [ ] 复用 scrcpy 实现桌面端控制 Android
 - [ ] MD3E（Material Design 3 Expressive）界面统一
 - [ ] 多会话标签页与自适应码率控制
-- [ ] 硬件加速解码与 FFI 零拷贝优化
 
 ---
 
