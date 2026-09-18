@@ -15,16 +15,18 @@ class AppTheme {
   AppTheme._();
 
   /// 基于 [scheme] 构建完整 ThemeData（M3 + 组件主题 + M3E 排版）。
-  static ThemeData build(ColorScheme scheme) {
+  /// [fontFamily] 传入加载成功的字体族（如 "HarmonyOS Sans"），null 时使用 Roboto。
+  static ThemeData build(ColorScheme scheme, {String? fontFamily}) {
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
       scaffoldBackgroundColor: scheme.surface,
       visualDensity: VisualDensity.adaptivePlatformDensity,
+      fontFamily: fontFamily,
     );
 
     return base.copyWith(
-      textTheme: buildM3ETextTheme(base.textTheme, scheme),
+      textTheme: buildM3ETextTheme(base.textTheme, scheme, fontFamily: fontFamily),
       cardTheme: CardThemeData(
         color: scheme.surfaceContainerLow,
         elevation: 1,
@@ -68,9 +70,15 @@ class AppTheme {
   }
 
   /// M3E 排版规范：display / headline / title / body / label 五层。
-  static TextTheme buildM3ETextTheme(TextTheme base, ColorScheme scheme) {
+  static TextTheme buildM3ETextTheme(
+    TextTheme base,
+    ColorScheme scheme, {
+    String? fontFamily,
+  }) {
+    final resolved = fontFamily;
     TextStyle merge(TextStyle? t, {required String role, Color? onColor}) =>
-        (t ?? const TextStyle()).copyWith(fontFamily: 'Roboto', color: onColor);
+        (t ?? const TextStyle())
+            .copyWith(fontFamily: resolved, color: onColor);
     return base.copyWith(
       displayLarge: merge(base.displayLarge, role: 'displayLarge', onColor: scheme.onSurface).copyWith(fontSize: 57, height: 1.12, fontWeight: FontWeight.w400, letterSpacing: -0.25),
       displayMedium: merge(base.displayMedium, role: 'displayMedium', onColor: scheme.onSurface).copyWith(fontSize: 45, height: 1.16, fontWeight: FontWeight.w400),

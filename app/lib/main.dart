@@ -52,6 +52,10 @@ Future<void> main() async {
     debugPrint('加载主题设置失败：$e');
   }
   runApp(const EmoteApp());
+
+  // 后台下载并注册 HarmonyOS 中文字体，不阻塞首帧；失败时主题回退系统字体。
+  // 必须先于 runApp 之后调用，确保 WidgetsBinding 可用且首帧立即出现。
+  FontManager().ensureLoaded();
 }
 
 class EmoteApp extends StatelessWidget {
@@ -61,8 +65,10 @@ class EmoteApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final settings = SettingsController();
 
+    // 监听设置与字体加载：任一变化都会触发重建，切换深浅色 / 动态色 /
+    // 字体下载完成时界面实时刷新。
     return ListenableBuilder(
-      listenable: settings,
+      listenable: Listenable.merge([settings, FontManager()]),
       builder: (context, _) {
         // 开启动态颜色只负责更换色板（Material You），绝不决定深浅色状态。
         // 深浅色由 settings.mode 独立控制；若动态色未启用或桌面端无可汲取，
