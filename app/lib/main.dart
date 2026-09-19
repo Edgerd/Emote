@@ -9,6 +9,8 @@ import 'package:emote/src/rust/frb_generated.dart';
 
 import 'pages/device_list_page.dart';
 import 'pages/settings_page.dart';
+import 'services/app_log.dart';
+import 'services/dev_settings_controller.dart';
 import 'services/harmony_font_loader.dart';
 import 'services/settings_controller.dart';
 import 'theme/app_theme.dart';
@@ -54,6 +56,18 @@ Future<void> main() async {
   } catch (e) {
     debugPrint('加载主题设置失败：$e');
   }
+  // 加载「开发者模式」持久化状态（关于页连击版本号解锁）。
+  try {
+    await DevSettingsController().load();
+  } catch (e) {
+    debugPrint('加载开发者设置失败：$e');
+  }
+  // 全局异常捕获：写入运行日志，供开发者选项页排查。
+  FlutterError.onError = (details) {
+    AppLog().error('Flutter',
+        '${details.exception}\n${details.stack}');
+    FlutterError.presentError(details);
+  };
   runApp(const EmoteApp());
 
   // 后台下载并注册 HarmonyOS 中文字体，不阻塞首帧；失败时主题回退系统字体。

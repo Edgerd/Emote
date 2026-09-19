@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../services/harmony_font_loader.dart';
 import '../services/settings_controller.dart';
+import 'about_page.dart';
 
 /// 预设色板：可用于自定义种子色的可选颜色。
 const List<Color> kPresetSeedColors = [
@@ -53,6 +54,9 @@ class SettingsPage extends StatelessWidget {
               SizedBox(height: 24),
               _SectionHeader('字体'),
               _FontChoiceCard(),
+              SizedBox(height: 24),
+              _SectionHeader('关于'),
+              _AboutCard(),
               SizedBox(height: 24),
             ],
           ),
@@ -434,6 +438,31 @@ class _FontRadioTile extends StatelessWidget {
             )
           : Radio<FontChoice>(value: value),
       onTap: onTap,
+    );
+  }
+}
+
+/// 关于入口：跳转到包含可点击版本号（连击解锁）的关于界面。
+class _AboutCard extends StatelessWidget {
+  const _AboutCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _SettingsGroup(
+      children: [
+        ListTile(
+          leading: Icon(
+            Icons.info_outline,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          title: const Text('关于'),
+          subtitle: const Text('版本信息与开发者选项'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const AboutPage()),
+          ),
+        ),
+      ],
     );
   }
 }

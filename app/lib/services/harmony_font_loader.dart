@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'settings_controller.dart';
+import 'app_log.dart';
 
 /// HarmonyOS Sans 字体管理器。
 ///
@@ -85,7 +86,7 @@ class FontManager extends ChangeNotifier {
         _fontFamily = family;
       }
     } catch (e) {
-      debugPrint('Harmony 字体加载失败，回退系统字体：$e');
+      AppLog().info('字体', '加载失败，回退系统字体：$e');
     } finally {
       _loading = false;
       _setDownloading(false);
@@ -98,7 +99,7 @@ class FontManager extends ChangeNotifier {
     if (path.isEmpty) return;
     final f = File(path);
     if (!f.existsSync()) {
-      debugPrint('Emote: 自定义字体文件不存在，忽略：$path');
+      AppLog().warn('字体', '自定义字体文件不存在，忽略：$path');
       return;
     }
     await loadCustomFont(path);
@@ -125,10 +126,10 @@ class FontManager extends ChangeNotifier {
       // 持久化路径指向缓存副本，避免用户删除源文件后失效。
       await SettingsController().setCustomFontPath(target.path);
       notifyListeners();
-      debugPrint('Emote: 自定义字体加载成功：${target.path}');
+      AppLog().info('字体', '自定义字体加载成功：${target.path}');
       return true;
     } catch (e) {
-      debugPrint('Emote: 自定义字体加载失败：$e');
+      AppLog().error('字体', '自定义字体加载失败：$e');
       return false;
     }
   }
@@ -137,6 +138,39 @@ class FontManager extends ChangeNotifier {
   void clearCustomFont() {
     if (_customFontFamily == null) return;
     _customFontFamily = null;
+    notifyListeners();
+  }
+
+  /// 开发者调试：HarmonyOS 与自定义字体的缓存目录路径（不存在则返回其应建路径）。
+  Future<String> fontCacheDirPath() async {
+    final dir = await getApplicationSupportDirectory();
+    return '${dir.path}${Platform.pathSeparator}harmony_sans';
+  }
+
+  /// 开发者调试：删除字体缓存（含下载失败残留与自定义字体副本），并复位内存状态。
+  ///
+  /// 注意：重启后 [ensureLoaded] 会根据需要重新下载/注册。
+  Future<void> resetFontCache() async {
+    final dir = await getApplicationSupportDirectory();
+    final regions = <String>[
+      '${dir.path}/harmony_sans',
+      '${dir.path}/custom_font',
+    ];
+    for (final r in regions) {
+      try {
+        final d = Directory(r);
+        if (d.existsSync()) {
+          d.deleteSync(recursive: true);
+          AppLog().info('字体', '已删除字体缓存 $r');
+        }
+      } catch (e) {
+        AppLog().error('字体', '删除字体缓存失败($r)：$e');
+      }
+    }
+    _fontFamily = null;
+    _customFontFamily = null;
+    _loading = false;
+    _didDownloadThisRun = false;
     notifyListeners();
   }
 
@@ -165,9 +199,9 @@ class FontManager extends ChangeNotifier {
     // 0) 优先探测系统：若系统已具备 CJK 渲染能力（任意中文字体或已装 HarmonyOS），
     //    直接沿用系统默认字体，**不下载、不注册**，避免冗余下载与重启重复下载。
     //    下载/缓存路径在日志中明确输出，便于定位（对应「下载到了哪里」问题）。
-    debugPrint('Emote: Harmony 字体缓存/下载目录 = ${fontDir.path}');
+    AppLog().info('字体', '缓存/下载目录：${fontDir.path}');
     if (_systemHasCjk()) {
-      debugPrint('Emote: 系统已具备中文字体/CJK，跳过 HarmonyOS 下载，沿用系统默认字体');
+      AppLog().info('字体', '系统已具备中文字体/CJK，跳过 HarmonyOS 下载，沿用系统默认字体');
       return null;
     }
 
