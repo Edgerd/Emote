@@ -15,10 +15,14 @@ import 'package:path_provider/path_provider.dart';
 /// 华为 HarmonyOS Sans 并动态注册，让中文能正常渲染（win7 中文不再显示方框）。
 ///
 /// 规则（内存 / 存储 / 网络友好）：
-/// 1. 若已解压过字体（缓存命中），直接用缓存，**不重复下载**（避免反复拉取约 50MB 包）；
-/// 2. 否则后台**流式**下载 zip 到临时文件（按块写盘，而非一次性整包进内存），
-///    通过 [downloadProgress] 实时暴露进度供 UI 淡入淡出展示；
-/// 3. 从临时 zip 解密到应用资源目录后**立即删除该临时 zip**，不占用多余磁盘；
+/// 0. **优先探测系统**：若系统已具备 CJK（中文字符）渲染能力（已装任意中文字体、
+///    或已装 HarmonyOS 字体），则**直接沿用系统默认字体，完全不再下载**——
+///    彻底避免「系统已装字体仍下载」「每次重启都重复下载」的冗余行为；
+/// 1. 仅当系统缺少 CJK 字体（如未中文化的精简 Win7）时才后台**流式**下载 zip 到
+///    临时文件（按块写盘，而非一次性整包进内存），通过 [downloadProgress] 实时
+///    暴露进度供 UI 淡入淡出展示；
+/// 2. 若之前已成功解压并注册（缓存命中，含 `.ok` 标记），直接用缓存**不重复下载**；
+/// 3. 从临时 zip 解压到应用支持目录后**立即删除该临时 zip**，不占用多余磁盘；
 /// 4. 下载/解压失败或超时 → 回退系统默认字体（不做任何覆盖）；
 /// 5. 加载成功后通过 [fontFamily] 暴露，触发主题重建。
 class FontManager extends ChangeNotifier {
@@ -100,8 +104,19 @@ class FontManager extends ChangeNotifier {
     final dir = await getApplicationSupportDirectory();
     final fontDir = Directory('${dir.path}/harmony_sans');
 
-    // 1) 已有缓存（上次下载并解压成功）则直接用，不再二次下载。
-    final cached = await _ensureCjkDirectory(fontDir);
+    // 0) 优先探测系统：若系统已具备 CJK 渲染能力（任意中文字体或已装 HarmonyOS），
+    //    直接沿用系统默认字体，**不下载、不注册**，避免冗余下载与重启重复下载。
+    //    下载/缓存路径在日志中明确输出，便于定位（对应「下载到了哪里」问题）。
+    debugPrint('Emote: Harmony 字体缓存/下载目录 = ${fontDir.path}');
+    if (_systemHasCjk()) {
+      debugPrint('Emote: 系统已具备中文字体/CJK，跳过 HarmonyOS 下载，沿用系统默认字体');
+      return null;
+    }
+
+    // 1) 已有缓存（上次下载并解压成功，含 .ok 完成标记）则直接用，不再二次下载。
+    final cached = File('${fontDir.path}/.ok').existsSync()
+        ? await _ensureCjkDirectory(fontDir)
+        : null;
     if (cached != null) {
       await _registerCjk(cached);
       return kHarmonyFamily;
@@ -123,12 +138,82 @@ class FontManager extends ChangeNotifier {
         return null;
       }
       await _registerCjk(scDir);
+      // 注册成功 → 写入完成标记，供下次启动缓存命中，避免重复下载。
+      try {
+        File('${fontDir.path}/.ok').writeAsStringSync(
+          'ok-${DateTime.now().toIso8601String()}',
+          flush: true,
+        );
+      } catch (_) {}
       return kHarmonyFamily;
     } finally {
       // 4) 存储优化：解压后立即删除临时 zip（约 50MB），不落盘缓存。
       try {
         if (zip.existsSync()) zip.deleteSync();
       } catch (_) {}
+    }
+  }
+
+  /// 判定当前系统是否已具备中文字符（CJK）渲染能力。
+  ///
+  /// 若能渲染，则直接沿用系统默认字体，**不再下载/注册 HarmonyOS**，避免在已装
+  /// 中文字体（或已装鸿蒙字体）的机器上重复拉取约 50MB 分发包。仅当系统完全缺少
+  /// CJK 字体（如未中文化的精简 Win7）时才返回 false、触发下载兜底。
+  bool _systemHasCjk() {
+    try {
+      // Android / iOS / macOS 系统自含 CJK 字体，无需下载。
+      if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS) return true;
+
+      final dirs = <String>[];
+      if (Platform.isWindows) {
+        dirs.add(r'C:\Windows\Fonts');
+      } else if (Platform.isLinux) {
+        dirs
+          ..add('/usr/share/fonts')
+          ..add('/usr/local/share/fonts')
+          ..add('${Platform.environment['HOME'] ?? '~'}/.fonts');
+      } else {
+        return true; // 其它平台按已具备 CJK 处理
+      }
+
+      // 常见 CJK 字体文件名特征（小写匹配）。
+      const cjkHints = <String>[
+        'harmony', // 鸿蒙系统字体（SC/TC）
+        'simsun', // 宋体
+        'simhei', // 黑体
+        'simfang', // 仿宋
+        'simkai', // 楷体
+        'msyh', // 微软雅黑
+        'msjh', // 微軟正黑體
+        'microsoftyahei',
+        'deng', // 等线
+        'noto', // Noto CJK
+        'sourcehansans', // 思源黑体
+        'droidsansfallback',
+        'wqy', // 文泉驿
+        'pingfang', // 苹方
+        'hiragino', // 冬青
+        'heiti', // 黑体
+        'songti', // 宋体
+        'kaiti', // 楷体
+        'fangsong', // 仿宋
+      ];
+
+      for (final d in dirs) {
+        final root = Directory(d);
+        if (!root.existsSync()) continue;
+        for (final f in root.listSync(recursive: true).whereType<File>()) {
+          final n = f.path.toLowerCase();
+          if (!(n.endsWith('.ttf') || n.endsWith('.ttc') || n.endsWith('.otf'))) {
+            continue;
+          }
+          if (cjkHints.any((h) => n.contains(h))) return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      // 扫描失败时保守按“无 CJK”处理，可能触发下载兜底（宁可多一次也不漏）。
+      return false;
     }
   }
 
