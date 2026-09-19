@@ -359,7 +359,11 @@ class _FontChoiceCard extends StatelessWidget {
               _FontRadioTile(
                 value: FontChoice.harmony,
                 isSelected: choice == FontChoice.harmony,
-                onTap: () => settings.setFontChoice(FontChoice.harmony),
+                onTap: () {
+                  settings.setFontChoice(FontChoice.harmony);
+                  // 即时加载：运行中切到 HarmonyOS 也会立刻加载/应用，无需重启。
+                  FontManager().ensureLoaded();
+                },
                 icon: Icons.font_download_outlined,
                 title: 'HarmonyOS 字体',
                 subtitle: mgr.isReady

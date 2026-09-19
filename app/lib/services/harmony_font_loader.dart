@@ -210,6 +210,12 @@ class FontManager extends ChangeNotifier {
       AppLog().info('字体', '系统已具备中文字体/CJK，跳过 HarmonyOS 下载，沿用系统默认字体');
       return null;
     }
+    // 用户已选「自定义字体」：使用用户自己的字体即可，**不再后台下载/加载 HarmonyOS**，
+    // 避免在系统缺 CJK 时冗余下载约 50MB 却完全不生效（主题用的是自定义字体）。
+    if (SettingsController().fontChoice == FontChoice.custom) {
+      AppLog().info('字体', '已选自定义字体，跳过 HarmonyOS 加载/下载');
+      return null;
+    }
 
     // 1) 已有缓存（上次下载并解压成功，含 .ok 完成标记）则直接用，不再二次下载。
     final cached = File('${fontDir.path}/.ok').existsSync()
