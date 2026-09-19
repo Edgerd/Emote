@@ -1,7 +1,9 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../services/harmony_font_loader.dart';
 import '../services/settings_controller.dart';
 
 /// 预设色板：可用于自定义种子色的可选颜色。
@@ -48,6 +50,9 @@ class SettingsPage extends StatelessWidget {
               _ThemeModeCard(),
               SizedBox(height: 12),
               _DynamicColorCard(),
+              SizedBox(height: 24),
+              _SectionHeader('字体'),
+              _FontChoiceCard(),
               SizedBox(height: 24),
             ],
           ),
@@ -280,6 +285,158 @@ class _ColorChip extends StatelessWidget {
             ? const Icon(Icons.check, color: Colors.white, size: 20)
             : null,
       ),
+    );
+  }
+}
+
+/// 字体来源设置：系统字体 / HarmonyOS 字体 / 自定义字体文件。
+class _FontChoiceCard extends StatelessWidget {
+  const _FontChoiceCard();
+
+  /// 通过文件选择器挑选中文字体文件并加载应用。
+  Future<void> _pickCustomFont(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final settings = SettingsController();
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['ttf', 'otf', 'ttc'],
+      allowMultiple: false,
+      dialogTitle: '选择中文字体文件',
+    );
+    if (result == null) return; // 用户取消
+    final path = result.files.single.path;
+    if (path == null || path.isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('无法读取所选字体文件路径')),
+      );
+      return;
+    }
+    final ok = await FontManager().loadCustomFont(path);
+    if (!ok) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('字体加载失败，请确认是有效的 TTF/OTF 文件')),
+      );
+      return;
+    }
+    await settings.setFontChoice(FontChoice.custom);
+    messenger.showSnackBar(
+      const SnackBar(content: Text('自定义字体已应用')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return ListenableBuilder(
+      listenable: Listenable.merge([SettingsController(), FontManager()]),
+      builder: (context, _) {
+        final settings = SettingsController();
+        final mgr = FontManager();
+        final choice = settings.fontChoice;
+        final customLoaded = mgr.customFontFamily != null;
+        final customPath = settings.customFontPath;
+
+        return _SettingsGroup(
+          children: [
+            _FontRadioTile(
+              value: FontChoice.system,
+              groupValue: choice,
+              onChanged: (v) => settings.setFontChoice(v),
+              icon: Icons.language,
+              title: '系统字体',
+              subtitle: '使用系统默认字体，不额外加载',
+            ),
+            const Divider(height: 1, indent: 72),
+            _FontRadioTile(
+              value: FontChoice.harmony,
+              groupValue: choice,
+              onChanged: (v) => settings.setFontChoice(v),
+              icon: Icons.font_download_outlined,
+              title: 'HarmonyOS 字体',
+              subtitle: mgr.isReady
+                  ? '已安装（系统缺中文字体时自动下载）'
+                  : '系统缺中文字体时自动下载',
+            ),
+            const Divider(height: 1, indent: 72),
+            _FontRadioTile(
+              value: FontChoice.custom,
+              groupValue: choice,
+              onChanged: (v) => settings.setFontChoice(v),
+              icon: Icons.insert_drive_file_outlined,
+              title: '自定义字体',
+              subtitle: customLoaded
+                  ? '已应用所选字体'
+                  : (customPath.isEmpty ? '选择本地 TTF/OTF 文件' : '字体文件待重新加载'),
+              onTrailingTap: () => _pickCustomFont(context),
+            ),
+            if (choice == FontChoice.custom && customPath.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(72, 0, 16, 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.folder_open, size: 16, color: scheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        customPath,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// 单个字体来源选项行（RadioListTile 基础上附带可选的操作按钮）。
+class _FontRadioTile extends StatelessWidget {
+  const _FontRadioTile({
+    required this.value,
+    required this.groupValue,
+    required this.onChanged,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    this.onTrailingTap,
+  });
+
+  final FontChoice value;
+  final FontChoice? groupValue;
+  final ValueChanged<FontChoice>? onChanged;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback? onTrailingTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
+      title: Text(title),
+      subtitle: Text(subtitle),
+      trailing: onTrailingTap != null
+          ? ChoiceChip(
+              label: const Text('选择文件'),
+              selected: groupValue == value,
+              onSelected: (_) => onTrailingTap?.call(),
+            )
+          : Radio<FontChoice>(
+              value: value,
+              groupValue: groupValue,
+              onChanged: onChanged,
+            ),
+      onTap: onTrailingTap != null
+          ? onTrailingTap
+          : () => onChanged?.call(value),
     );
   }
 }

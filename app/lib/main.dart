@@ -15,6 +15,9 @@ import 'theme/app_theme.dart';
 import 'theme/dynamic_color.dart';
 import 'theme/window_size_class.dart';
 
+/// 全局导航 Key：供非 Widget 上下文中弹出「重启应用」提示框。
+final GlobalKey<NavigatorState> kAppNavigatorKey = GlobalKey<NavigatorState>();
+
 /// Windows：直接从可执行文件同目录加载 Rust 动态库。
 ///
 /// flutter_rust_bridge 默认用 [kDefaultExternalLibraryLoaderConfig.ioDirectory]
@@ -55,7 +58,29 @@ Future<void> main() async {
 
   // 后台下载并注册 HarmonyOS 中文字体，不阻塞首帧；失败时主题回退系统字体。
   // 必须先于 runApp 之后调用，确保 WidgetsBinding 可用且首帧立即出现。
-  FontManager().ensureLoaded();
+  FontManager().ensureLoaded().then((_) {
+    // 本次确实下载过鸿蒙字体 → 提示重启，保证渲染稳定生效。
+    if (FontManager().didDownloadThisRun) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        kAppNavigatorKey.currentState?.push(
+          PageRouteBuilder(
+            opaque: false,
+            barrierDismissible: true,
+            transitionsBuilder: (_, anim, __, child) =>
+                FadeTransition(opacity: anim, child: child),
+            transitionDuration: const Duration(milliseconds: 150),
+            pageBuilder: (_, __, ___) => const _RestartPromptDialog(),
+          ),
+        );
+      });
+    }
+  });
+
+  // 若用户此前选择了自定义字体，启动时按持久化路径自动加载。
+  final settings = SettingsController();
+  if (settings.fontChoice == FontChoice.custom) {
+    FontManager().loadSavedCustomFont(settings.customFontPath);
+  }
 }
 
 class EmoteApp extends StatelessWidget {
@@ -84,13 +109,22 @@ class EmoteApp extends StatelessWidget {
                 ? (darkDynamic ?? lightDynamic)
                 : null;
 
-            // 万一 HarmonyOS 字体尚未下载完成，回退系统默认字体（不会阻塞首帧）。
-            final String? fontFamily =
-                FontManager().isReady ? FontManager().fontFamily : null;
+            // 按用户选择的字体来源解析界面字体族：
+            // - system：始终用系统默认字体（null）；
+            // - custom：用设置里选择的自定义字体；
+            // - harmony：鸿蒙字体加载成功才用，否则回退系统字体（不阻塞首帧）。
+            final font = FontManager();
+            final String? fontFamily = switch (settings.fontChoice) {
+              FontChoice.system => null,
+              FontChoice.custom => font.customFontFamily,
+              FontChoice.harmony =>
+                font.isReady ? font.fontFamily : null,
+            };
 
             return MaterialApp(
               title: 'Emote',
               debugShowCheckedModeBanner: false,
+              navigatorKey: kAppNavigatorKey,
               theme: AppTheme.build(
                 PlatformAccent.resolve(
                   brightness: Brightness.light,
@@ -311,6 +345,75 @@ class _FontProgressCard extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 鸿蒙字体下载完成后的「重启应用」提示框。
+class _RestartPromptDialog extends StatelessWidget {
+  const _RestartPromptDialog();
+
+  void _restartApp(BuildContext context) {
+    Navigator.of(context).pop();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      // 桌面端：重新拉起自身进程后再退出原进程，实现真正重启。
+      // Android / 其它平台：仅退出（默认动画不存在或不支持重启时由桌面壳兜底）。
+      final exe = Platform.resolvedExecutable;
+      try {
+        if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+          Process.start(exe, const []);
+        }
+      } catch (_) {
+        // 重启失败忽略，仍退出，用户可手动重开。
+      }
+      exit(0);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Dialog(
+      backgroundColor: scheme.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Icon(Icons.font_download_outlined,
+                color: scheme.primary, size: 28),
+            const SizedBox(height: 12),
+            Text('中文字体下载完成',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            Text(
+              'HarmonyOS 字体已下载并安装到本地。为让所有界面稳定应用新字体，建议重启应用',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodyMedium
+                  ?.copyWith(color: scheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('稍后'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(onPressed: () => _restartApp(context),
+                    child: const Text('立即重启')),
+              ],
+            ),
+          ],
         ),
       ),
     );

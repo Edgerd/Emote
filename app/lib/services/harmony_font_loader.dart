@@ -8,6 +8,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'settings_controller.dart';
+
 /// HarmonyOS Sans 字体管理器。
 ///
 /// 背景：Windows 7 用兼容层运行、或系统缺少中文字体时，Flutter 自带 Roboto
@@ -31,6 +33,8 @@ class FontManager extends ChangeNotifier {
   /// 当前应使用的字体族；null 表示使用系统默认字体。
   String? _fontFamily;
   bool _loading = false;
+  String? _customFontFamily;
+  bool _didDownloadThisRun = false;
 
   // ---- 下载进度状态（供 UI 淡入淡出展示）----
   bool _downloading = false;
@@ -45,6 +49,15 @@ class FontManager extends ChangeNotifier {
   String? get fontFamily => _fontFamily;
   bool get isReady => _fontFamily != null;
   bool get isLoading => _loading;
+
+  // ---- 自定义字体（设置页「选择字体文件」）----
+  static const String kCustomFamily = 'EmoteCustomFont';
+
+  /// 已注册的自定义字体族；null 表示未加载或加载失败。
+  String? get customFontFamily => _customFontFamily;
+
+  /// 本次运行是否真的下载过 HarmonyOS 字体（true 时才提示重启）。
+  bool get didDownloadThisRun => _didDownloadThisRun;
 
   /// 是否正在下载字体分发包。
   bool get isDownloading => _downloading;
@@ -80,6 +93,53 @@ class FontManager extends ChangeNotifier {
       _setDownloading(false);
       notifyListeners();
     }
+  }
+
+  /// 在应用启动时按需加载已保存的自定义字体（若持久化路径存在且可读）。
+  Future<void> loadSavedCustomFont(String path) async {
+    if (path.isEmpty) return;
+    final f = File(path);
+    if (!f.existsSync()) {
+      debugPrint('Emote: 自定义字体文件不存在，忽略：$path');
+      return;
+    }
+    await loadCustomFont(path);
+  }
+
+  /// 从任意路径加载自定义字体文件并注册到 Flutter；成功返回 true，失败返回 false。
+  ///
+  /// 为兼容各平台直接读取权限差异（Windows / Linux 可直接读源路径；Android 需
+  /// 先落盘再读），统一**复制**到应用支持目录的 `custom_font/` 下再加载，保证持久化
+  /// 路径跨重启可用。
+  Future<bool> loadCustomFont(String sourcePath) async {
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final cacheDir = Directory('${dir.path}/custom_font');
+      cacheDir.createSync(recursive: true);
+      final target = File('${cacheDir.path}/custom_font.ttf');
+      final bytes = File(sourcePath).readAsBytesSync();
+      target.writeAsBytesSync(bytes, flush: true);
+
+      final loader = FontLoader(kCustomFamily);
+      loader.addFont(Future.value(ByteData.sublistView(bytes)));
+      await loader.load();
+      _customFontFamily = kCustomFamily;
+      // 持久化路径指向缓存副本，避免用户删除源文件后失效。
+      await SettingsController().setCustomFontPath(target.path);
+      notifyListeners();
+      debugPrint('Emote: 自定义字体加载成功：${target.path}');
+      return true;
+    } catch (e) {
+      debugPrint('Emote: 自定义字体加载失败：$e');
+      return false;
+    }
+  }
+
+  /// 清除自定义字体（切回其它字体来源时调用）。
+  void clearCustomFont() {
+    if (_customFontFamily == null) return;
+    _customFontFamily = null;
+    notifyListeners();
   }
 
   /// 设置下载状态并立即通知（进入时置零，供 UI 淡入）。
@@ -139,6 +199,7 @@ class FontManager extends ChangeNotifier {
       }
       await _registerCjk(scDir);
       // 注册成功 → 写入完成标记，供下次启动缓存命中，避免重复下载。
+      _didDownloadThisRun = true;
       try {
         File('${fontDir.path}/.ok').writeAsStringSync(
           'ok-${DateTime.now().toIso8601String()}',
