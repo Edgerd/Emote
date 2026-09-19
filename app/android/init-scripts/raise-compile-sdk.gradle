@@ -1,0 +1,55 @@
+// ============================================================================
+// raise-compile-sdk.gradle
+//
+// Gradle init script：在 Android 构建中把全部模块的 compileSdk 抬升至 36。
+//
+// 背景
+// ----
+// file_picker 8.3.7（及其同类旧式插件）在其 android/build.gradle 中把 compileSdk
+// 硬编码为 34，不随 app 的 flutter.compileSdkVersion=36 变化；而它（或其传递依赖
+// flutter_plugin_android_lifecycle 2.0.35）消费的 AAR 元数据要求 compileSdk>=36。
+// 于是这些以 34 编译的 library 模块在 assembleRelease 时触发 CheckAarMetadata 校验失败。
+//
+// 为什么用 init script
+// ----
+// 1) init script 由 Gradle 在“任何项目配置之前”加载（~/.gradle/init.d/），因此在此注册
+//    allprojects { afterEvaluate {...} } 永远不会撞上
+//    "Cannot run Project.afterEvaluate(Action) when the project is already evaluated"
+//    —— 该异常来自在根构建脚本的 subprojects {} 中过早手动调用 afterEvaluate。
+// 2) allprojects 会覆盖 app 与全部 Flutter 插件子项目（哪怕插件来自 pub-cache、不可编辑）。
+// 3) afterEvaluate 在模块自身的 android{} 配置块执行完毕后再回调，确保最终取到我们抬升
+//    后的值，不会被插件脚本里后写的 compileSdk 34 覆盖。
+//
+// 使用方式
+// ----
+// 放到 ~/.gradle/init.d/ 下（由 Gradle 自动发现并执行）；CI 与本地均可通过
+//   mkdir -p ~/.gradle/init.d && cp app/android/init-scripts/raise-compile-sdk.gradle ~/.gradle/init.d/
+// 启用。使用 Kotlin DSL 的较新 AGP（8.x）下亦可正常工作（见下方兼容说明）。
+// ============================================================================
+
+allprojects {
+    afterEvaluate { p ->
+        def hasAndroidPlugin =
+            p.plugins.hasPlugin("com.android.application") ||
+            p.plugins.hasPlugin("com.android.library")
+        if (!hasAndroidPlugin) {
+            return
+        }
+        def android = p.extensions.findByName("android")
+        if (android == null) {
+            return
+        }
+        // Groovy 动态调用 setCompileSdk(...)：AGP 8.x（Kotlin DSL/Java）与 AGP 7.x 均兼容；
+        // 对于插件自行以字符串设置 compileSdkVersion 的情况，两种写法都赋一次更稳妥。
+        try {
+            android.compileSdk = 36
+        } catch (ignored) {
+            // 兼容 "compileSdk = 36" 在赋值型属性不可用时回退到 setCompileSdk(int)
+        }
+        try {
+            android.setProperty("compileSdk", 36)
+        } catch (ignored) {
+            // no-op：属性不存在时忽略
+        }
+    }
+}

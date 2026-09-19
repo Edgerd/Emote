@@ -242,6 +242,12 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
 
+      - name: 注册 Gradle init script（抬升全模块 compileSdk 至 36）
+        run: |
+          mkdir -p "$HOME/.gradle/init.d"
+          cp app/android/init-scripts/raise-compile-sdk.gradle "$HOME/.gradle/init.d/raise-compile-sdk.gradle"
+          ls -la "$HOME/.gradle/init.d/"
+
       - name: 构建签名 APK
         run: flutter build apk --release
         working-directory: app

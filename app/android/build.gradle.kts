@@ -19,23 +19,13 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
-// 部分插件（如 file_picker 8.3.7）把 compileSdk 硬编码为 34，不随
-// flutter.compileSdkVersion 变化；其传递依赖 flutter_plugin_android_lifecycle 2.0.35
-// 的 AAR 仅要求 compileSdk>=36。这里在评估后统一把 app 与全部插件子项目（library/
-// application）的 compileSdk 抬到 36，使 CheckAarMetadata 校验通过。
-subprojects {
-    afterEvaluate {
-        if (plugins.hasPlugin("com.android.library")) {
-            extensions.configure<com.android.build.api.dsl.LibraryExtension> {
-                compileSdk = 36
-            }
-        } else if (plugins.hasPlugin("com.android.application")) {
-            extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
-                compileSdk = 36
-            }
-        }
-    }
-}
+// compileSdk 抬升至 36 的逻辑已迁移到 init-scripts/raise-compile-sdk.gradle：
+// 部分插件（如 file_picker 8.3.7）将 compileSdk 硬编码为 34，不随
+// flutter.compileSdkVersion 变化，而其传递依赖 flutter_plugin_android_lifecycle 2.0.35
+// 的 AAR 仅要求 compileSdk>=36；若插件仍以 34 编译，CheckAarMetadata 校验会失败。
+// init-scripts 由 Gradle 在所有项目配置前加载，能在插件完成配置后安全地抬升 compileSdk，
+// 避免在根构建脚本中手动调用 afterEvaluate 触发
+// "Cannot run Project.afterEvaluate(Action) when the project is already evaluated"。
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
