@@ -89,6 +89,10 @@ pub(crate) async fn write_frame<W: AsyncWrite + Unpin>(
     Ok(())
 }
 
+/// 单帧 payload 上限，防止对端用伪造的超大 `length` 触发巨量内存分配导致 OOM（DoS）。
+/// 远程桌面编码帧远小于该值；256 MiB 足够承载常规媒体帧，又能封死 `0xFFFFFFFF` 等恶意长度。
+const MAX_FRAME_LEN: usize = 256 << 20;
+
 /// 从任意 async reader 读取一帧；对端优雅关闭时返回 `Ok(None)`。
 pub(crate) async fn read_frame<R: AsyncRead + Unpin>(r: &mut R) -> std::io::Result<Option<Frame>> {
     let mut hbuf = [0u8; MESSAGE_HEADER_LEN];
@@ -98,7 +102,14 @@ pub(crate) async fn read_frame<R: AsyncRead + Unpin>(r: &mut R) -> std::io::Resu
     let header = MessageHeader::from_bytes(&hbuf).ok_or_else(|| {
         std::io::Error::new(std::io::ErrorKind::InvalidData, "协议头魔数不匹配")
     })?;
-    let mut payload = vec![0u8; header.length as usize];
+    let plen = header.length as usize;
+    if plen > MAX_FRAME_LEN {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("帧长度 {plen} 超过上限 {MAX_FRAME_LEN}，拒绝读取以免耗尽内存"),
+        ));
+    }
+    let mut payload = vec![0u8; plen];
     r.read_exact(&mut payload).await?;
     Ok(Some(Frame {
         msg_type: header.frame_type,

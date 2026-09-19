@@ -84,6 +84,7 @@ impl DiscoveryService {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn register_service(
     daemon: &ServiceDaemon,
     service_type: &str,

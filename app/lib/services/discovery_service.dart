@@ -161,6 +161,8 @@ class DiscoveryService extends ChangeNotifier {
     try {
       final devices = await handle.listDevices();
       final state = await handle.state();
+      // 等待期间 stop()/start() 可能已切换句柄：丢弃过期结果，避免旧数据覆盖新状态。
+      if (_handle != handle) return;
       _devices = devices;
       _state = state;
       _error = null;

@@ -82,14 +82,8 @@ fn run_browser_loop(
     while !stop.load(Ordering::Relaxed) {
         let mut drained = Vec::new();
         for (ty, rx) in receivers.drain(..) {
-            loop {
-                match rx.try_recv() {
-                    Ok(ev) => {
-                        handle_service_event(ty, ev, &devices, handle, &sink);
-                    }
-                    // Empty 表示暂无新事件，Disconnected 表示浏览已停止；二者均退出本轮轮询。
-                    Err(_) => break,
-                }
+            while let Ok(ev) = rx.try_recv() {
+                handle_service_event(ty, ev, &devices, handle, &sink);
             }
             drained.push((ty, rx));
         }
