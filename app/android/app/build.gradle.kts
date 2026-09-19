@@ -17,7 +17,9 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.emote.app.emote"
-    compileSdk = flutter.compileSdkVersion
+    // file_picker 等插件的 AAR 元数据要求 compileSdk 36；
+    // Flutter 默认（flutter.compileSdkVersion）滞后一版，这里显式抬高以满足插件约束。
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
