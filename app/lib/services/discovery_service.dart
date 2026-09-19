@@ -31,6 +31,7 @@ class DiscoveryService extends ChangeNotifier {
   Timer? _timer;
   final int _pollIntervalMs = 2000;
   bool _multicastEnabled = false;
+  bool _refreshing = false;
   String? _localDeviceId;
 
   DiscoveryHandle? get handle => _handle;
@@ -70,6 +71,10 @@ class DiscoveryService extends ChangeNotifier {
     if (_handle != null) {
       return true; // 已启动，幂等
     }
+    // 提前进入「启动中」态，避免启动耗时阶段 UI 仍显示「未在扫描」。
+    _state = DiscoveryState.starting;
+    notifyListeners();
+    DiscoveryHandle? handle;
     try {
       // Android：mDNS 依赖 UDP 组播，先持有 MulticastLock 才能接收组播包。
       final multicastHeld = await AndroidConnectivity.acquireMulticastLock();
@@ -80,7 +85,7 @@ class DiscoveryService extends ChangeNotifier {
       _localDeviceId = id;
       final ip = hostIp ?? (await _detectLanHostIp()) ?? '127.0.0.1';
 
-      final handle = await DiscoveryHandle.newInstance();
+      handle = await DiscoveryHandle.newInstance();
       await handle.startBroadcast(
         cfg: BroadcastConfig(
           id: id,
@@ -104,6 +109,18 @@ class DiscoveryService extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (e) {
+      // 失败路径释放已创建的资源：避免 DiscoveryHandle 遗留在运行态、
+      // Android 组播锁被长期持有导致电量/网络异常。
+      if (handle != null) {
+        try {
+          await handle.stopBrowse();
+        } catch (_) {}
+        try {
+          await handle.stopBroadcast();
+        } catch (_) {}
+      }
+      await AndroidConnectivity.releaseMulticastLock();
+      _multicastEnabled = false;
       _error = e.toString();
       _state = DiscoveryState.error;
       notifyListeners();
@@ -137,8 +154,10 @@ class DiscoveryService extends ChangeNotifier {
   }
 
   Future<void> _refresh() async {
+    if (_refreshing) return; // 防重入：慢查询未完成时跳过本次，避免乱序覆盖新数据
     final handle = _handle;
     if (handle == null) return;
+    _refreshing = true;
     try {
       final devices = await handle.listDevices();
       final state = await handle.state();
@@ -147,8 +166,10 @@ class DiscoveryService extends ChangeNotifier {
       _error = null;
     } catch (e) {
       _error = e.toString();
+    } finally {
+      _refreshing = false;
+      notifyListeners();
     }
-    notifyListeners();
   }
 
   /// 生成本机设备 ID（时间戳 + 随机后缀的轻量实现）。
