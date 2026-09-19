@@ -16,12 +16,13 @@ import 'app_log.dart';
 /// 华为 HarmonyOS Sans 并动态注册，让中文能正常渲染（win7 中文不再显示方框）。
 ///
 /// 规则（内存 / 存储 / 网络友好）：
-/// 0. **优先探测系统**：若系统已具备 CJK（中文字符）渲染能力（已装任意中文字体、
-///    或已装 HarmonyOS 字体），则**直接沿用系统默认字体，完全不再下载**——
-///    彻底避免「系统已装字体仍下载」「每次重启都重复下载」的冗余行为；
-/// 1. 仅当系统缺少 CJK 字体（如未中文化的精简 Win7）时才后台**流式**下载 zip 到
-///    临时文件（按块写盘，而非一次性整包进内存），通过 [downloadProgress] 实时
-///    暴露进度供 UI 淡入淡出展示；
+/// 0. **用户显式选择「HarmonyOS 字体」时始终加载并应用**（有缓存用缓存，无则下载一次）
+///    ——修复「下载/安装了却没有应用」：此前系统装了中文字体就短路返回，导致字体永不生效；
+///    仅在**非 HarmonyOS 选择**下，才探测系统；若系统已具备 CJK（已装任意中文字体、或已装
+///    HarmonyOS 字体），直接沿用系统默认字体，不再下载——避免「系统已装字体仍下载」「每次
+///    重启都重复下载」的冗余行为；
+/// 1. 系统缺少 CJK 字体（如未中文化的精简 Win7）时后台**流式**下载 zip 到临时文件
+///    （按块写盘，而非一次性整包进内存），通过 [downloadProgress] 实时暴露进度供 UI 淡入淡出展示；
 /// 2. 若之前已成功解压并注册（缓存命中，含 `.ok` 标记），直接用缓存**不重复下载**；
 /// 3. 从临时 zip 解压到应用支持目录后**立即删除该临时 zip**，不占用多余磁盘；
 /// 4. 下载/解压失败或超时 → 回退系统默认字体（不做任何覆盖）；
@@ -200,7 +201,12 @@ class FontManager extends ChangeNotifier {
     //    直接沿用系统默认字体，**不下载、不注册**，避免冗余下载与重启重复下载。
     //    下载/缓存路径在日志中明确输出，便于定位（对应「下载到了哪里」问题）。
     AppLog().info('字体', '缓存/下载目录：${fontDir.path}');
-    if (_systemHasCjk()) {
+    // 显式停留在「HarmonyOS 字体」选项时：始终加载 HarmonyOS（有缓存用缓存，无则下载，
+    // 均在本次内应用），**不再因系统已具备中文字体而跳过**。这修复了「下载/安装了字体
+    // 却一直没有应用」的问题——此前系统装过中文字体就命中 `_systemHasCjk` 短路返回 null，
+    // 导致即使选了 HarmonyOS 字体、_fontFamily 仍为 null、主题永不切字体。
+    final wantHarmony = SettingsController().fontChoice == FontChoice.harmony;
+    if (!wantHarmony && _systemHasCjk()) {
       AppLog().info('字体', '系统已具备中文字体/CJK，跳过 HarmonyOS 下载，沿用系统默认字体');
       return null;
     }
@@ -385,6 +391,10 @@ class FontManager extends ChangeNotifier {
       final archive = ZipDecoder().decodeBuffer(input);
       for (final file in archive) {
         if (!file.isFile) continue;
+        // 跳过 macOS 打包垃圾（__MACOSX 元数据目录、AppleDouble ._ 资源文件），
+        // 否则会被当成真实 ttf 落盘，浪费磁盘并可能干扰 CJK 目录扫描。
+        final name = file.name.toLowerCase();
+        if (name.contains('__macosx') || name.contains('/._')) continue;
         // 防 zip 路径穿越：统一用 / 规范化后拼接到 outDir。
         final rel = file.name.split('/').join(Platform.pathSeparator);
         final target = File('$outDir$Platform.pathSeparator$rel');
