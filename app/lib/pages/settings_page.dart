@@ -336,86 +336,89 @@ class _FontChoiceCard extends StatelessWidget {
         final customLoaded = mgr.customFontFamily != null;
         final customPath = settings.customFontPath;
 
-        return _SettingsGroup(
-          children: [
-            _FontRadioTile(
-              value: FontChoice.system,
-              groupValue: choice,
-              onChanged: (v) => settings.setFontChoice(v),
-              icon: Icons.language,
-              title: '系统字体',
-              subtitle: '使用系统默认字体，不额外加载',
-            ),
-            const Divider(height: 1, indent: 72),
-            _FontRadioTile(
-              value: FontChoice.harmony,
-              groupValue: choice,
-              onChanged: (v) => settings.setFontChoice(v),
-              icon: Icons.font_download_outlined,
-              title: 'HarmonyOS 字体',
-              subtitle: mgr.isReady
-                  ? '已安装（系统缺中文字体时自动下载）'
-                  : '系统缺中文字体时自动下载',
-            ),
-            const Divider(height: 1, indent: 72),
-            _FontRadioTile(
-              value: FontChoice.custom,
-              groupValue: choice,
-              onChanged: (v) => settings.setFontChoice(v),
-              icon: Icons.insert_drive_file_outlined,
-              title: '自定义字体',
-              subtitle: customLoaded
-                  ? '已应用所选字体'
-                  : (customPath.isEmpty ? '选择本地 TTF/OTF 文件' : '字体文件待重新加载'),
-              onTrailingTap: () => _pickCustomFont(context),
-            ),
-            if (choice == FontChoice.custom && customPath.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(72, 0, 16, 12),
-                child: Row(
-                  children: [
-                    Icon(Icons.folder_open, size: 16, color: scheme.onSurfaceVariant),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        customPath,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(color: scheme.onSurfaceVariant),
-                      ),
-                    ),
-                  ],
-                ),
+        return RadioGroup<FontChoice>(
+          groupValue: choice,
+          onChanged: (v) {
+            if (v != null) settings.setFontChoice(v);
+          },
+          child: _SettingsGroup(
+            children: [
+              _FontRadioTile(
+                value: FontChoice.system,
+                isSelected: choice == FontChoice.system,
+                onTap: () => settings.setFontChoice(FontChoice.system),
+                icon: Icons.language,
+                title: '系统字体',
+                subtitle: '使用系统默认字体，不额外加载',
               ),
-          ],
+              const Divider(height: 1, indent: 72),
+              _FontRadioTile(
+                value: FontChoice.harmony,
+                isSelected: choice == FontChoice.harmony,
+                onTap: () => settings.setFontChoice(FontChoice.harmony),
+                icon: Icons.font_download_outlined,
+                title: 'HarmonyOS 字体',
+                subtitle: mgr.isReady
+                    ? '已安装（系统缺中文字体时自动下载）'
+                    : '系统缺中文字体时自动下载',
+              ),
+              const Divider(height: 1, indent: 72),
+              _FontRadioTile(
+                value: FontChoice.custom,
+                isSelected: choice == FontChoice.custom,
+                onTap: () => _pickCustomFont(context),
+                icon: Icons.insert_drive_file_outlined,
+                title: '自定义字体',
+                subtitle: customLoaded
+                    ? '已应用所选字体'
+                    : (customPath.isEmpty ? '选择本地 TTF/OTF 文件' : '字体文件待重新加载'),
+              ),
+              if (choice == FontChoice.custom && customPath.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(72, 0, 16, 12),
+                  child: Row(
+                    children: [
+                      Icon(Icons.folder_open, size: 16, color: scheme.onSurfaceVariant),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          customPath,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         );
       },
     );
   }
 }
 
-/// 单个字体来源选项行（RadioListTile 基础上附带可选的操作按钮）。
+/// 单个字体来源选项行（选中态由 [RadioGroup] 祖先管理）。
 class _FontRadioTile extends StatelessWidget {
   const _FontRadioTile({
     required this.value,
-    required this.groupValue,
-    required this.onChanged,
+    required this.isSelected,
     required this.icon,
     required this.title,
     required this.subtitle,
-    this.onTrailingTap,
+    this.onTap,
   });
 
   final FontChoice value;
-  final FontChoice? groupValue;
-  final ValueChanged<FontChoice>? onChanged;
+  final bool isSelected;
   final IconData icon;
   final String title;
   final String subtitle;
-  final VoidCallback? onTrailingTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -423,20 +426,14 @@ class _FontRadioTile extends StatelessWidget {
       leading: Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
       title: Text(title),
       subtitle: Text(subtitle),
-      trailing: onTrailingTap != null
+      trailing: onTap != null
           ? ChoiceChip(
               label: const Text('选择文件'),
-              selected: groupValue == value,
-              onSelected: (_) => onTrailingTap?.call(),
+              selected: isSelected,
+              onSelected: (_) => onTap?.call(),
             )
-          : Radio<FontChoice>(
-              value: value,
-              groupValue: groupValue,
-              onChanged: onChanged,
-            ),
-      onTap: onTrailingTap != null
-          ? onTrailingTap
-          : () => onChanged?.call(value),
+          : Radio<FontChoice>(value: value),
+      onTap: onTap,
     );
   }
 }

@@ -66,10 +66,10 @@ Future<void> main() async {
           PageRouteBuilder(
             opaque: false,
             barrierDismissible: true,
-            transitionsBuilder: (_, anim, __, child) =>
+            transitionsBuilder: (_, anim, _, child) =>
                 FadeTransition(opacity: anim, child: child),
             transitionDuration: const Duration(milliseconds: 150),
-            pageBuilder: (_, __, ___) => const _RestartPromptDialog(),
+            pageBuilder: (_, _, _) => const _RestartPromptDialog(),
           ),
         );
       });
@@ -146,7 +146,7 @@ class EmoteApp extends StatelessWidget {
               // 在 Navigator 上层叠加字体下载进度条：出现/消失时淡入淡出。
               builder: (context, child) => Stack(
                 children: [
-                  if (child != null) child,
+                  ?child,
                   const _FontDownloadOverlay(),
                 ],
               ),
