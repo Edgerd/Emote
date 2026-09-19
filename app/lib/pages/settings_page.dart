@@ -3,9 +3,10 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
+import '../services/app_log.dart';
+import '../services/dev_settings_controller.dart';
 import '../services/harmony_font_loader.dart';
 import '../services/settings_controller.dart';
-import 'about_page.dart';
 
 /// 预设色板：可用于自定义种子色的可选颜色。
 const List<Color> kPresetSeedColors = [
@@ -55,8 +56,11 @@ class SettingsPage extends StatelessWidget {
               _SectionHeader('字体'),
               _FontChoiceCard(),
               SizedBox(height: 24),
-              _SectionHeader('关于'),
-              _AboutCard(),
+              _SectionHeader('个性化'),
+              _PersonalizationCard(),
+              SizedBox(height: 24),
+              _SectionHeader('系统'),
+              _ResetCard(),
               SizedBox(height: 24),
             ],
           ),
@@ -446,25 +450,175 @@ class _FontRadioTile extends StatelessWidget {
   }
 }
 
-/// 关于入口：跳转到包含可点击版本号（连击解锁）的关于界面。
-class _AboutCard extends StatelessWidget {
-  const _AboutCard();
+/// 个性化设置：减少动画、内容显示密度、默认传输层。
+class _PersonalizationCard extends StatelessWidget {
+  const _PersonalizationCard();
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: SettingsController(),
+      builder: (context, _) {
+        final settings = SettingsController();
+        return _SettingsGroup(
+          children: [
+            SwitchListTile(
+              value: settings.reduceMotion,
+              onChanged: settings.setReduceMotion,
+              title: const Text('减少动画'),
+              subtitle: const Text('弱化界面转场与隐式动画（无障碍）'),
+              secondary: const _IconBox(Icons.animation),
+            ),
+            const Divider(height: 1, indent: 72),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+              child: Row(
+                children: [
+                  const _IconBox(Icons.density_small),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('内容显示密度',
+                            style: Theme.of(context).textTheme.bodyLarge),
+                        Text('宽松 / 紧凑',
+                            style: Theme.of(context).textTheme.bodySmall),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(72, 8, 16, 4),
+              child: SegmentedButton<ContentDensity>(
+                segments: const [
+                  ButtonSegment(
+                    value: ContentDensity.comfortable,
+                    label: Text('宽松'),
+                  ),
+                  ButtonSegment(
+                    value: ContentDensity.compact,
+                    label: Text('紧凑'),
+                  ),
+                ],
+                selected: {settings.contentDensity},
+                showSelectedIcon: true,
+                onSelectionChanged: (s) =>
+                    settings.setContentDensity(s.first),
+              ),
+            ),
+            const Divider(height: 1, indent: 72),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Row(
+                children: [
+                  const _IconBox(Icons.swap_vert),
+                  const SizedBox(width: 16),
+                  Text('默认传输层',
+                      style: Theme.of(context).textTheme.bodyLarge),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: SegmentedButton<TransportPref>(
+                segments: const [
+                  ButtonSegment(
+                    value: TransportPref.auto,
+                    label: Text('自动'),
+                  ),
+                  ButtonSegment(
+                    value: TransportPref.quic,
+                    label: Text('QUIC'),
+                  ),
+                  ButtonSegment(
+                    value: TransportPref.tcp,
+                    label: Text('TCP'),
+                  ),
+                ],
+                selected: {settings.transportPref},
+                showSelectedIcon: true,
+                onSelectionChanged: (s) =>
+                    settings.setTransportPref(s.first),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// 设定项旁的方形图标容器（MD3 secondaryContainer 弱对比）。
+class _IconBox extends StatelessWidget {
+  const _IconBox(this.icon);
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: scheme.secondaryContainer.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      alignment: Alignment.center,
+      child: Icon(icon, color: scheme.onSecondaryContainer, size: 22),
+    );
+  }
+}
+
+/// 重置全部设置（确认弹窗后复位主题/字体/个性化/开发者模式与字体缓存）。
+class _ResetCard extends StatelessWidget {
+  const _ResetCard();
+
+  Future<void> _confirmReset(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('重置全部设置'),
+        content: const Text(
+          '将恢复默认主题、字体来源、个性化设置，并清除开发者模式与字体缓存。重启后按需重新下载字体。确定继续？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await SettingsController().resetAll();
+    await DevSettingsController().setDeveloperMode(false);
+    await FontManager().resetFontCache();
+    AppLog().info('设置', '已重置全部设置');
+    messenger.showSnackBar(
+      const SnackBar(content: Text('已重置全部设置，重启后完全生效')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return _SettingsGroup(
       children: [
         ListTile(
-          leading: Icon(
-            Icons.info_outline,
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-          title: const Text('关于'),
-          subtitle: const Text('版本信息与开发者选项'),
-          trailing: const Icon(Icons.chevron_right),
-          onTap: () => Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const AboutPage()),
-          ),
+          leading: Icon(Icons.restart_alt,
+              color: scheme.onSurfaceVariant),
+          title: const Text('重置全部设置'),
+          subtitle: const Text('恢复默认主题 / 字体 / 个性化，清除缓存'),
+          onTap: () => _confirmReset(context),
         ),
       ],
     );

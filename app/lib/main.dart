@@ -8,7 +8,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart'
 import 'package:emote/src/rust/frb_generated.dart';
 
 import 'pages/device_list_page.dart';
-import 'pages/settings_page.dart';
+import 'pages/more_page.dart';
 import 'services/app_log.dart';
 import 'services/dev_settings_controller.dart';
 import 'services/harmony_font_loader.dart';
@@ -16,6 +16,7 @@ import 'services/settings_controller.dart';
 import 'theme/app_theme.dart';
 import 'theme/dynamic_color.dart';
 import 'theme/window_size_class.dart';
+import 'widgets/m3e_wave_progress.dart';
 
 /// 全局导航 Key：供非 Widget 上下文中弹出「重启应用」提示框。
 final GlobalKey<NavigatorState> kAppNavigatorKey = GlobalKey<NavigatorState>();
@@ -158,11 +159,17 @@ class EmoteApp extends StatelessWidget {
               themeMode: settings.mode,
               home: const AppShell(),
               // 在 Navigator 上层叠加字体下载进度条：出现/消失时淡入淡出。
-              builder: (context, child) => Stack(
-                children: [
-                  ?child,
-                  const _FontDownloadOverlay(),
-                ],
+              // 「减少动画」开启时通过 disableAnimations 全局弱化隐式转场动画（无障碍对齐）。
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  disableAnimations: settings.reduceMotion,
+                ),
+                child: Stack(
+                  children: [
+                    ?child,
+                    const _FontDownloadOverlay(),
+                  ],
+                ),
               ),
             );
           },
@@ -183,14 +190,14 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   int _index = 0;
 
-  static const _titles = ['设备发现', '设置'];
+  static const _titles = ['设备发现', '更多'];
 
   @override
   Widget build(BuildContext context) {
     final sizeClass = WindowSizeClassResolver.of(context);
     final desktop = sizeClass.isDesktopClass;
 
-    final body = _index == 0 ? const DeviceListPage() : const SettingsPage();
+    final body = _index == 0 ? const DeviceListPage() : const MorePage();
 
     final destinations = const [
       NavigationDestination(
@@ -199,9 +206,9 @@ class _AppShellState extends State<AppShell> {
         label: '设备发现',
       ),
       NavigationDestination(
-        icon: Icon(Icons.settings_outlined),
-        selectedIcon: Icon(Icons.settings),
-        label: '设置',
+        icon: Icon(Icons.grid_view_outlined),
+        selectedIcon: Icon(Icons.grid_view),
+        label: '更多',
       ),
     ];
 
@@ -227,9 +234,9 @@ class _AppShellState extends State<AppShell> {
                   label: Text('设备发现'),
                 ),
                 const NavigationRailDestination(
-                  icon: Icon(Icons.settings_outlined),
-                  selectedIcon: Icon(Icons.settings),
-                  label: Text('设置'),
+                  icon: Icon(Icons.grid_view_outlined),
+                  selectedIcon: Icon(Icons.grid_view),
+                  label: Text('更多'),
                 ),
               ],
             ),
@@ -339,13 +346,13 @@ class _FontProgressCard extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: value,
-                  minHeight: 5,
-                  backgroundColor: scheme.surfaceContainerHighest,
-                ),
+              M3eWaveProgress(
+                value: value,
+                height: 5,
+                color: scheme.primary,
+                backgroundColor: scheme.surfaceContainerHighest,
+                // 不确定态（无总大小）时不做进度，展示循环波浪。
+                waveCount: 2,
               ),
               const SizedBox(height: 6),
               Text(

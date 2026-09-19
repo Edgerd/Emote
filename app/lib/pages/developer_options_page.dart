@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../services/app_log.dart';
+import '../services/dev_settings_controller.dart';
 import '../services/harmony_font_loader.dart';
+import '../services/settings_controller.dart';
 import 'log_viewer_page.dart';
 
 /// 开发者选项页：程序运行日志与若干调试功能。
@@ -128,6 +130,41 @@ class _LogGroup extends StatelessWidget {
 class _DebugGroup extends StatelessWidget {
   const _DebugGroup();
 
+  Future<void> _resetAllSettings(BuildContext context) async {
+    final log = AppLog();
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('重置全部设置'),
+        content: const Text(
+          '将恢复默认主题、字体来源与个性化设置，清除开发者模式、字体缓存，'
+          '并清空运行日志。确定继续？',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('确定'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await SettingsController().resetAll();
+    await DevSettingsController().setDeveloperMode(false);
+    await FontManager().resetFontCache();
+    AppLog().clear();
+    log.info('开发者', '已重置全部设置');
+    messenger.showSnackBar(
+      const SnackBar(content: Text('已重置全部设置并清空日志')),
+    );
+  }
+
   Future<void> _resetFontCache(BuildContext context) async {
     final log = AppLog();
     final messenger = ScaffoldMessenger.of(context);
@@ -177,6 +214,12 @@ class _DebugGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Group(children: [
+      _GroupTile(
+        icon: Icons.restart_alt,
+        title: '重置全部设置',
+        subtitle: '恢复默认主题 / 字体 / 个性化，清空日志',
+        onTap: () => _resetAllSettings(context),
+      ),
       _GroupTile(
         icon: Icons.refresh,
         title: '重置字体缓存',

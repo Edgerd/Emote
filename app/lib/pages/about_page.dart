@@ -26,7 +26,7 @@ class _AboutPageState extends State<AboutPage> {
     super.initState();
     PackageInfo.fromPlatform().then((info) {
       if (mounted) {
-        setState(() => _version = '${info.version}+${info.buildNumber}');
+        setState(() => _version = info.version);
       }
     });
   }

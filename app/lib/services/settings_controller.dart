@@ -17,6 +17,27 @@ enum FontChoice {
   custom,
 }
 
+/// 内容显示密度。
+enum ContentDensity {
+  /// 宽松：更大的行距与留白（默认）。
+  comfortable,
+
+  /// 紧凑：更小的行距，一屏展示更多信息。
+  compact,
+}
+
+/// 默认传输层偏好（供后续连接逻辑参考）。
+enum TransportPref {
+  /// 自动：由连接逻辑决定（QUIC 优先、TCP 回退）。
+  auto,
+
+  /// 强制优先使用 QUIC。
+  quic,
+
+  /// 强制优先使用 TCP。
+  tcp,
+}
+
 /// 主题与字体设置的可变状态 + SharedPreferences 持久化。
 ///
 /// 负责：主题模式（Light / Dark / System）、自定义种子色、动态颜色开关、
@@ -33,18 +54,27 @@ class SettingsController extends ChangeNotifier {
   static const _kDynamicColor = 'settings.dynamicColor';
   static const _kFontChoice = 'settings.fontChoice';
   static const _kCustomFontPath = 'settings.customFontPath';
+  static const _kReduceMotion = 'settings.reduceMotion';
+  static const _kContentDensity = 'settings.contentDensity';
+  static const _kTransportPref = 'settings.transportPref';
 
   ThemeMode _mode = ThemeMode.system;
   Color _seedColor = kDefaultSeedColor;
   late bool _dynamicColor;
   FontChoice _fontChoice = FontChoice.harmony;
   String _customFontPath = '';
+  bool _reduceMotion = false;
+  ContentDensity _contentDensity = ContentDensity.comfortable;
+  TransportPref _transportPref = TransportPref.auto;
 
   ThemeMode get mode => _mode;
   Color get seedColor => _seedColor;
   bool get dynamicColorEnabled => _dynamicColor;
   FontChoice get fontChoice => _fontChoice;
   String get customFontPath => _customFontPath;
+  bool get reduceMotion => _reduceMotion;
+  ContentDensity get contentDensity => _contentDensity;
+  TransportPref get transportPref => _transportPref;
 
   /// 桌面端默认关闭动态颜色，Android 默认开启。
   bool _defaultDynamicColor() {
@@ -66,6 +96,9 @@ class SettingsController extends ChangeNotifier {
     _dynamicColor = dynamicColor ?? _defaultDynamicColor();
     _fontChoice = _choiceFromIndex(choiceIndex);
     _customFontPath = prefs.getString(_kCustomFontPath) ?? '';
+    _reduceMotion = prefs.getBool(_kReduceMotion) ?? false;
+    _contentDensity = _densityFromIndex(prefs.getInt(_kContentDensity));
+    _transportPref = _transportFromIndex(prefs.getInt(_kTransportPref));
     notifyListeners();
   }
 
@@ -104,6 +137,46 @@ class SettingsController extends ChangeNotifier {
     }
   }
 
+  ContentDensity _densityFromIndex(int? index) {
+    switch (index) {
+      case 1:
+        return ContentDensity.compact;
+      default:
+        return ContentDensity.comfortable;
+    }
+  }
+
+  int _densityToIndex(ContentDensity density) {
+    switch (density) {
+      case ContentDensity.comfortable:
+        return 0;
+      case ContentDensity.compact:
+        return 1;
+    }
+  }
+
+  TransportPref _transportFromIndex(int? index) {
+    switch (index) {
+      case 1:
+        return TransportPref.quic;
+      case 2:
+        return TransportPref.tcp;
+      default:
+        return TransportPref.auto;
+    }
+  }
+
+  int _transportToIndex(TransportPref pref) {
+    switch (pref) {
+      case TransportPref.auto:
+        return 0;
+      case TransportPref.quic:
+        return 1;
+      case TransportPref.tcp:
+        return 2;
+    }
+  }
+
   int _modeToIndex(ThemeMode mode) {
     switch (mode) {
       case ThemeMode.light:
@@ -122,6 +195,9 @@ class SettingsController extends ChangeNotifier {
     await prefs.setBool(_kDynamicColor, _dynamicColor);
     await prefs.setInt(_kFontChoice, _choiceToIndex(_fontChoice));
     await prefs.setString(_kCustomFontPath, _customFontPath);
+    await prefs.setBool(_kReduceMotion, _reduceMotion);
+    await prefs.setInt(_kContentDensity, _densityToIndex(_contentDensity));
+    await prefs.setInt(_kTransportPref, _transportToIndex(_transportPref));
   }
 
   Future<void> setThemeMode(ThemeMode value) async {
@@ -156,5 +232,51 @@ class SettingsController extends ChangeNotifier {
     if (_customFontPath == value) return;
     _customFontPath = value;
     await _save();
+  }
+
+  Future<void> setReduceMotion(bool value) async {
+    if (_reduceMotion == value) return;
+    _reduceMotion = value;
+    notifyListeners();
+    await _save();
+  }
+
+  Future<void> setContentDensity(ContentDensity value) async {
+    if (_contentDensity == value) return;
+    _contentDensity = value;
+    notifyListeners();
+    await _save();
+  }
+
+  Future<void> setTransportPref(TransportPref value) async {
+    if (_transportPref == value) return;
+    _transportPref = value;
+    notifyListeners();
+    await _save();
+  }
+
+  /// 将「本设置控制器」的全部持久化项复位为默认值。
+  ///
+  /// 只负责 settings.* 键；字体缓存与开发者模式（分属 [FontManager] / 
+  /// [DevSettingsController]）由调用方一并复位，避免控制器间循环依赖。
+  Future<void> resetAll() async {
+    _mode = ThemeMode.system;
+    _seedColor = kDefaultSeedColor;
+    _dynamicColor = _defaultDynamicColor();
+    _fontChoice = FontChoice.harmony;
+    _customFontPath = '';
+    _reduceMotion = false;
+    _contentDensity = ContentDensity.comfortable;
+    _transportPref = TransportPref.auto;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kThemeMode);
+    await prefs.remove(_kSeedColor);
+    await prefs.remove(_kDynamicColor);
+    await prefs.remove(_kFontChoice);
+    await prefs.remove(_kCustomFontPath);
+    await prefs.remove(_kReduceMotion);
+    await prefs.remove(_kContentDensity);
+    await prefs.remove(_kTransportPref);
   }
 }

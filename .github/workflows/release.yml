@@ -290,10 +290,15 @@ jobs:
           fi
           # 标题统一为 Emote <tag>（如 Emote Dev-2.0）
           RELEASE_TITLE="Emote ${GITHUB_REF_NAME}"
-          # 版本通道：Dev-*（预览）通过 GitHub 的 pre-release 标签标记，
-          # 不再把 dev 写进版本号；正式版（v*）不带该标记。
+          # 版本通道：以下任一情况标记为 Pre-release（预览通道）——
+          #   1. 标签为 Dev-*（预览分支）；
+          #   2. 语义化版本带预发布限定（如 v2.3.1-pre、v2.3.1-rc.1、v2.3.1-beta）；
+          #   3. 产品显式指定的「Pre-release」版本（当前为 v2.3.1）。
+          # 正式稳定版（v* + 纯数字版本）不带该标记。
           PRE_ARGS=()
-          if [[ "$GITHUB_REF_NAME" == Dev-* ]]; then
+          if [[ "$GITHUB_REF_NAME" == Dev-* ]] \
+             || [[ "$GITHUB_REF_NAME" =~ v[0-9]+\.[0-9]+\.[0-9]+-(pre|rc|beta|alpha)([\.0-9]*)$ ]] \
+             || [[ " $GITHUB_REF_NAME " == *" v2.3.1 "* ]]; then
             PRE_ARGS+=( --prerelease )
             echo "标记为 Pre-release（预览通道）"
           fi
