@@ -313,8 +313,8 @@ class _FontChoiceCard extends StatelessWidget {
     );
     if (result == null) return; // 用户取消
     final paths = result.files
-        .map((f) => f.path)
-        .where((p) => p != null && p.isNotEmpty)
+        .map((f) => f.path ?? '')
+        .where((p) => p.isNotEmpty)
         .toList();
     if (paths.isEmpty) {
       messenger.showSnackBar(
@@ -322,6 +322,8 @@ class _FontChoiceCard extends StatelessWidget {
       );
       return;
     }
+    // 文件选择跨异步间隙，先确保 context 仍有效再使用。
+    if (!context.mounted) return;
     // 先按文件名自动推断字重、分派到 4 槽位（regular/medium/bold/black）。
     final slots = FontManager().autoAssignRoles(paths);
     final previewFamily = 'EmoteCustomFont_Preview_${DateTime.now().microsecond}';
@@ -346,7 +348,7 @@ class _FontChoiceCard extends StatelessWidget {
       barrierDismissible: true,
       barrierLabel: '确认自定义字体',
       transitionDuration: const Duration(milliseconds: 200),
-      pageBuilder: (_, __, ___) => _CustomFontConfirmDialog(
+      pageBuilder: (_, _, _) => _CustomFontConfirmDialog(
         sourcePaths: sourcePaths,
         initialSlots: initialSlots,
         previewFamily: previewFamily,
@@ -647,7 +649,7 @@ class _CustomFontConfirmDialogState extends State<_CustomFontConfirmDialog> {
                     ),
                     Expanded(
                       child: DropdownButtonFormField<String>(
-                        value: _slots[i],
+                        initialValue: _slots[i],
                         decoration: const InputDecoration(
                           isDense: true,
                           border: OutlineInputBorder(),

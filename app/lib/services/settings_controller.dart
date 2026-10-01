@@ -141,7 +141,7 @@ class SettingsController extends ChangeNotifier {
         final decoded = json.decode(raw);
         if (decoded is List) {
           return [
-            if (decoded.length > 0) _asString(decoded[0]) else '',
+            if (decoded.isNotEmpty) _asString(decoded[0]) else '',
             if (decoded.length > 1) _asString(decoded[1]) else '',
             if (decoded.length > 2) _asString(decoded[2]) else '',
             if (decoded.length > 3) _asString(decoded[3]) else '',
@@ -311,15 +311,19 @@ class SettingsController extends ChangeNotifier {
   }
 
   static List<String> _normalizeSlots(List<String> paths) => [
-        paths.length > 0 ? paths[0] : '',
+        paths.isNotEmpty ? paths[0] : '',
         paths.length > 1 ? paths[1] : '',
         paths.length > 2 ? paths[2] : '',
         paths.length > 3 ? paths[3] : '',
       ];
 
-  static bool _slotEquals(List<String> a, List<String> b) =>
-      a.length == b.length &&
-      for (var i = 0; i < a.length; i++) a[i] == b[i];
+  static bool _slotEquals(List<String> a, List<String> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
 
   Future<void> setReduceMotion(bool value) async {
     if (_reduceMotion == value) return;
