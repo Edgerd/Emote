@@ -9,9 +9,10 @@ rust-version = "1.92"
 description = "Emote cross-platform remote-control core library (Flutter + Rust FFI)."
 license = "Apache-2.0"
 
-# cdylib：为 Flutter 桌面端 / Android 提供动态库；staticlib：便于三方端打包/静态链接。
+# cdylib：为 Flutter 桌面端 / Android 提供动态库；staticlib：便于三方端打包/静态链接；
+# rlib：供 `cargo test` 的集成测试（tests/ 目录）链接本 crate 公共 API（不影响 Flutter 消费的 cdylib）。
 [lib]
-crate-type = ["cdylib", "staticlib"]
+crate-type = ["cdylib", "staticlib", "rlib"]
 name = "emote_core"
 
 [dependencies]
@@ -34,6 +35,10 @@ tracing = "0.1"                                       # 诊断日志（轻量）
 # ---- 后续分段将以 feature 开关逐段启用 ----
 # reis     = { version = "=0.7.0", features = ["tokio"] }   # Linux 输入注入（libei，按需）
 # ffmpeg-next = { version = "=8.1.0", optional = true }     # 可选软件解码（第 4.3 段）
+
+# 测试专用依赖：`#[tokio::test]` 需要 tokio 的 `test-util` 特性（不影响发布产物）。
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util"] }
 
 # 发布优化配置：体积 / 性能 / 崩溃行为可控，满足可复现构建。
 [profile.release]
