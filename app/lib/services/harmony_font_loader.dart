@@ -241,7 +241,7 @@ class FontManager extends ChangeNotifier {
       for (var i = 0; i < slots.length; i++) {
         final src = slots[i];
         if (src.isEmpty) continue;
-        final target = File('${cacheDir.path}/custom_slot_${i}.ttf');
+        final target = File('${cacheDir.path}/custom_slot_$i.ttf');
         final bytes = File(src).readAsBytesSync();
         target.writeAsBytesSync(bytes, flush: true);
         slots[i] = target.path; // 持久化缓存副本路径
