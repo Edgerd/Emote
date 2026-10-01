@@ -83,12 +83,13 @@ impl ConnectionManager {
             return Ok(self.get_connection_state(&dev.id));
         }
         let target = self.runtime.block_on(self.connect_async(dev))?;
-        debug_assert_eq!(
-            target.shared.get().state,
-            ConnectionState::Connected,
-            "连接建立后应处于 Connected"
-        );
+        // handler 任务在 spawn 后才异步把状态从 Connecting 推到 Connected，
+        // 此处可能读到瞬时值，故放宽为「Connecting/Connected 均可」，避免竞态误报。
         let conn_state = target.shared.get().state;
+        debug_assert!(
+            matches!(conn_state, ConnectionState::Connecting | ConnectionState::Connected),
+            "连接建立后状态应为 Connecting/Connected，实际 {conn_state:?}"
+        );
         self.connections.insert(dev.id.clone(), target);
         Ok(conn_state)
     }
