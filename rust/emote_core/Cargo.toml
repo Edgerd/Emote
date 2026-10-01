@@ -34,6 +34,25 @@ tracing = "0.1"                                       # 诊断日志（轻量）
 
 # ---- 第 3 段：核心功能 ----
 scrcpy-protocol = "0.1.1"                             # 第3.1段 scrcpy 协议层（VideoPacket/ControlSender/h264）
+libc = "0.2"                                           # uinput ioctl（纯 C 绑定，全 target 安全）
+
+# 第 3 段可选特性：
+# - `capture`：启用 pinray 真机屏幕捕获（默认关，保证沙箱/CI 默认构建不拉 pinray）。
+[features]
+default = []
+capture = ["dep:pinray"]
+
+# Windows 桌面（SendInput 注入 + openh264 软编解码 + 可选 pinray）
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }
+openh264 = "0.5"
+pinray = { version = "0.2", optional = true }
+
+# Linux 桌面（非 Android）：openh264 软编解码 + X11(XTest) 注入 + 可选 pinray
+[target.'cfg(all(target_os = "linux", not(target_os = "android")))'.dependencies]
+openh264 = "0.5"
+x11-dl = "2"
+pinray = { version = "0.2", optional = true }
 
 # ---- 后续分段将以 feature 开关逐段启用 ----
 # reis     = { version = "=0.7.0", features = ["tokio"] }   # Linux 输入注入（libei，按需）
