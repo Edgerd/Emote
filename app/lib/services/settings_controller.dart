@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -7,14 +8,34 @@ import '../theme/app_theme.dart';
 
 /// 字体来源选择。
 enum FontChoice {
-  /// 系统默认字体（不下载、不加载任何自定义字体）。
+  /// 系统默认字体（不下载、不加载任何自定义字体；Windows 解析为微软雅黑，
+  /// Linux 解析为 Noto CJK 系或系统默认，移动端跟随系统）。
   system,
 
   /// HarmonyOS 字体：系统缺中文字体时自动后台下载并应用。
   harmony,
 
-  /// 用户自选字体文件。
+  /// 用户自选字体文件（多字重角色槽位，见 [FontRole]）。
   custom,
+}
+
+/// 自定义字体的字重角色槽位（与 UI 实际使用字重 w400/w500/w700/w900 对齐）。
+///
+/// 自定义字体以「同一族名 [FontManager.kCustomFamily] + 多字重」注册，
+/// `TextStyle.fontWeight` 命中已注册的最近字重；`FontWeight.w600` 等中间值
+/// 由引擎自动选最近已注册字重（medium）。
+enum FontRole {
+  /// Regular（w400）。
+  regular,
+
+  /// Medium（w500）。
+  medium,
+
+  /// Bold（w700）。
+  bold,
+
+  /// Black（w900）。
+  black,
 }
 
 /// 内容显示密度。
@@ -54,6 +75,8 @@ class SettingsController extends ChangeNotifier {
   static const _kDynamicColor = 'settings.dynamicColor';
   static const _kFontChoice = 'settings.fontChoice';
   static const _kCustomFontPath = 'settings.customFontPath';
+  /// 自定义字体 4 槽位（按 [FontRole] 顺序：regular/medium/bold/black），JSON 持久化。
+  static const _kCustomFontPaths = 'settings.customFontPaths';
   static const _kReduceMotion = 'settings.reduceMotion';
   static const _kContentDensity = 'settings.contentDensity';
   static const _kTransportPref = 'settings.transportPref';
@@ -61,8 +84,10 @@ class SettingsController extends ChangeNotifier {
   ThemeMode _mode = ThemeMode.system;
   Color _seedColor = kDefaultSeedColor;
   late bool _dynamicColor;
-  FontChoice _fontChoice = FontChoice.harmony;
+  FontChoice _fontChoice = FontChoice.system;
   String _customFontPath = '';
+  /// 自定义字体 4 槽位（按 [FontRole] 顺序，缺省槽位为空串）。
+  List<String> _customFontPaths = const [''];
   bool _reduceMotion = false;
   ContentDensity _contentDensity = ContentDensity.comfortable;
   TransportPref _transportPref = TransportPref.auto;
@@ -72,6 +97,8 @@ class SettingsController extends ChangeNotifier {
   bool get dynamicColorEnabled => _dynamicColor;
   FontChoice get fontChoice => _fontChoice;
   String get customFontPath => _customFontPath;
+  /// 自定义字体 4 槽位（不可变视图）。
+  List<String> get customFontPaths => List.unmodifiable(_customFontPaths);
   bool get reduceMotion => _reduceMotion;
   ContentDensity get contentDensity => _contentDensity;
   TransportPref get transportPref => _transportPref;
@@ -96,11 +123,43 @@ class SettingsController extends ChangeNotifier {
     _dynamicColor = dynamicColor ?? _defaultDynamicColor();
     _fontChoice = _choiceFromIndex(choiceIndex);
     _customFontPath = prefs.getString(_kCustomFontPath) ?? '';
+    _customFontPaths = _migrateCustomFontPaths(prefs);
     _reduceMotion = prefs.getBool(_kReduceMotion) ?? false;
     _contentDensity = _densityFromIndex(prefs.getInt(_kContentDensity));
     _transportPref = _transportFromIndex(prefs.getInt(_kTransportPref));
     notifyListeners();
   }
+
+  /// 自定义字体槽位读取（含旧单键 [settings.customFontPath] 迁移）。
+  ///
+  /// 新键 [settings.customFontPaths] 缺失时，若旧键非空则迁移为
+  /// `[old, '', '', '']`；新键已存在则直接解析（容忍旧数据长度不齐）。
+  List<String> _migrateCustomFontPaths(SharedPreferences prefs) {
+    final raw = prefs.getString(_kCustomFontPaths);
+    if (raw != null) {
+      try {
+        final decoded = json.decode(raw);
+        if (decoded is List) {
+          return [
+            if (decoded.length > 0) _asString(decoded[0]) else '',
+            if (decoded.length > 1) _asString(decoded[1]) else '',
+            if (decoded.length > 2) _asString(decoded[2]) else '',
+            if (decoded.length > 3) _asString(decoded[3]) else '',
+          ];
+        }
+      } catch (_) {
+        // 解析失败 → 走旧键迁移路径。
+      }
+      return [''];
+    }
+    // 旧键迁移。
+    if (_customFontPath.isNotEmpty) {
+      return [_customFontPath, '', '', ''];
+    }
+    return [''];
+  }
+
+  static String _asString(Object? v) => v?.toString() ?? '';
 
   FontChoice _choiceFromIndex(int? index) {
     switch (index) {
@@ -111,7 +170,7 @@ class SettingsController extends ChangeNotifier {
       case 2:
         return FontChoice.custom;
       default:
-        return FontChoice.harmony;
+        return FontChoice.system;
     }
   }
 
@@ -195,6 +254,7 @@ class SettingsController extends ChangeNotifier {
     await prefs.setBool(_kDynamicColor, _dynamicColor);
     await prefs.setInt(_kFontChoice, _choiceToIndex(_fontChoice));
     await prefs.setString(_kCustomFontPath, _customFontPath);
+    await prefs.setString(_kCustomFontPaths, json.encode(_customFontPaths));
     await prefs.setBool(_kReduceMotion, _reduceMotion);
     await prefs.setInt(_kContentDensity, _densityToIndex(_contentDensity));
     await prefs.setInt(_kTransportPref, _transportToIndex(_transportPref));
@@ -234,6 +294,33 @@ class SettingsController extends ChangeNotifier {
     await _save();
   }
 
+  /// 设置自定义字体 4 槽位（按 [FontRole] 顺序）。
+  ///
+  /// 同步维护旧单键 [settings.customFontPath]（取第一个非空槽位），
+  /// 保持向后兼容；槽位全空时旧键也清空。
+  Future<void> setCustomFontPaths(List<String> paths) async {
+    final normalized = _normalizeSlots(paths);
+    if (_slotEquals(normalized, _customFontPaths)) {
+      return;
+    }
+    _customFontPaths = normalized;
+    // 旧键镜像：首槽非空则存首槽，否则清空。
+    _customFontPath = normalized.firstWhere((p) => p.isNotEmpty, orElse: () => '');
+    notifyListeners();
+    await _save();
+  }
+
+  static List<String> _normalizeSlots(List<String> paths) => [
+        paths.length > 0 ? paths[0] : '',
+        paths.length > 1 ? paths[1] : '',
+        paths.length > 2 ? paths[2] : '',
+        paths.length > 3 ? paths[3] : '',
+      ];
+
+  static bool _slotEquals(List<String> a, List<String> b) =>
+      a.length == b.length &&
+      for (var i = 0; i < a.length; i++) a[i] == b[i];
+
   Future<void> setReduceMotion(bool value) async {
     if (_reduceMotion == value) return;
     _reduceMotion = value;
@@ -263,8 +350,9 @@ class SettingsController extends ChangeNotifier {
     _mode = ThemeMode.system;
     _seedColor = kDefaultSeedColor;
     _dynamicColor = _defaultDynamicColor();
-    _fontChoice = FontChoice.harmony;
+    _fontChoice = FontChoice.system;
     _customFontPath = '';
+    _customFontPaths = const [''];
     _reduceMotion = false;
     _contentDensity = ContentDensity.comfortable;
     _transportPref = TransportPref.auto;
@@ -275,6 +363,7 @@ class SettingsController extends ChangeNotifier {
     await prefs.remove(_kDynamicColor);
     await prefs.remove(_kFontChoice);
     await prefs.remove(_kCustomFontPath);
+    await prefs.remove(_kCustomFontPaths);
     await prefs.remove(_kReduceMotion);
     await prefs.remove(_kContentDensity);
     await prefs.remove(_kTransportPref);

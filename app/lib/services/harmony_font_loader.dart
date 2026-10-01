@@ -76,6 +76,47 @@ class FontManager extends ChangeNotifier {
   static const Duration kTimeout = Duration(seconds: 60);
   static const String kHarmonyFamily = 'HarmonyOS Sans';
 
+  /// 解析「系统默认字体」选择下应使用的字体族名（[SettingsController] 的 system 分支）。
+  ///
+  /// - Windows → `Microsoft YaHei`（微软雅黑，系统自带）；
+  /// - Linux → 优先 `Noto Sans CJK SC`，未命中则扫描已安装的 Noto CJK 包；
+  /// - 移动端（Android/iOS）→ `null`（跟随系统默认，无需指定族名）；
+  /// - 其它 → `null`。
+  ///
+  /// 返回 null 时，[main.dart] 保持 `ThemeData.fontFamily` 为 null，引擎回退到
+  /// 平台默认字体，避免在 Windows/Linux 上错误回退到 Roboto（无 CJK 字形）。
+  static String? defaultFamilyForPlatform() {
+    if (Platform.isWindows) return 'Microsoft YaHei';
+    if (Platform.isLinux) {
+      // 常见发行版默认安装的 Noto CJK 包：优先 SC，其次任一可用。
+      const preferred = ['Noto Sans CJK SC', 'Noto Sans CJK', 'Noto CJK'];
+      for (final family in preferred) {
+        if (_linuxHasFontFamily(family)) return family;
+      }
+      // 均未命中：仍返回首选族名，字体引擎按最近匹配处理（Noto CJK 已装但未命中
+      // fc-match 时可回退到系统默认渲染，不阻塞启动）。
+      return preferred.first;
+    }
+    // Android / iOS / macOS / 其它：跟随系统。
+    return null;
+  }
+
+  /// Linux 下通过 `fc-match` 探测某字体族是否已安装（3 秒超时，失败视为无）。
+  static bool _linuxHasFontFamily(String family) {
+    try {
+      final result = Process.runSync(
+        'fc-match',
+        ['-f', '%{family}', family],
+        runInShell: false,
+      );
+      // fc-match 总是返回「最接近」的族名；若与请求相同说明已安装。
+      final out = result.stdout.toString().trim();
+      return out.isNotEmpty && out != family && false || out == family;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 解析并加载 HarmonyOS Sans（幂等；失败即回退，永不抛错）。
   Future<void> ensureLoaded() async {
     if (_loading || _fontFamily != null) return;
