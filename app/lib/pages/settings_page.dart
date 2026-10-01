@@ -301,25 +301,60 @@ class _ColorChip extends StatelessWidget {
 class _FontChoiceCard extends StatelessWidget {
   const _FontChoiceCard();
 
-  /// 通过文件选择器挑选中文字体文件并加载应用。
-  Future<void> _pickCustomFont(BuildContext context) async {
+  /// 批量挑选中文字体文件（可多选）→ 自动推断字重分派到 4 槽位 →
+  /// 弹出预览确认框，让用户核对/调整后正式应用。
+  Future<void> _pickCustomFonts(BuildContext context) async {
     final messenger = ScaffoldMessenger.of(context);
-    final settings = SettingsController();
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['ttf', 'otf', 'ttc'],
-      allowMultiple: false,
-      dialogTitle: '选择中文字体文件',
+      allowMultiple: true,
+      dialogTitle: '选择中文字体文件（可多选，按字重区分）',
     );
     if (result == null) return; // 用户取消
-    final path = result.files.single.path;
-    if (path == null || path.isEmpty) {
+    final paths = result.files
+        .map((f) => f.path)
+        .where((p) => p != null && p.isNotEmpty)
+        .toList();
+    if (paths.isEmpty) {
       messenger.showSnackBar(
         const SnackBar(content: Text('无法读取所选字体文件路径')),
       );
       return;
     }
-    final ok = await FontManager().loadCustomFont(path);
+    // 先按文件名自动推断字重、分派到 4 槽位（regular/medium/bold/black）。
+    final slots = FontManager().autoAssignRoles(paths);
+    final previewFamily = 'EmoteCustomFont_Preview_${DateTime.now().microsecond}';
+    await _showCustomFontConfirm(
+      context,
+      sourcePaths: paths,
+      initialSlots: slots,
+      previewFamily: previewFamily,
+    );
+  }
+
+  /// 预览确认框：注册临时预览族、展示样例、允许调整 4 槽位归属，确认后正式应用。
+  Future<void> _showCustomFontConfirm(
+    BuildContext context, {
+    required List<String> sourcePaths,
+    required List<String> initialSlots,
+    required String previewFamily,
+  }) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final applied = await showGeneralDialog<List<String>>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '确认自定义字体',
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (_, __, ___) => _CustomFontConfirmDialog(
+        sourcePaths: sourcePaths,
+        initialSlots: initialSlots,
+        previewFamily: previewFamily,
+      ),
+    );
+    if (applied == null) return; // 用户取消，不做任何改动
+    final settings = SettingsController();
+    final ok = await FontManager().loadCustomFontSlots(applied);
     if (!ok) {
       messenger.showSnackBar(
         const SnackBar(content: Text('字体加载失败，请确认是有效的 TTF/OTF 文件')),
@@ -328,7 +363,7 @@ class _FontChoiceCard extends StatelessWidget {
     }
     await settings.setFontChoice(FontChoice.custom);
     messenger.showSnackBar(
-      const SnackBar(content: Text('自定义字体已应用')),
+      const SnackBar(content: Text('自定义字体（多字重）已应用')),
     );
   }
 
@@ -342,7 +377,6 @@ class _FontChoiceCard extends StatelessWidget {
         final mgr = FontManager();
         final choice = settings.fontChoice;
         final customLoaded = mgr.customFontFamily != null;
-        final customPath = settings.customFontPath;
 
         return RadioGroup<FontChoice>(
           groupValue: choice,
@@ -378,31 +412,50 @@ class _FontChoiceCard extends StatelessWidget {
               _FontRadioTile(
                 value: FontChoice.custom,
                 isSelected: choice == FontChoice.custom,
-                onTap: () => _pickCustomFont(context),
+                onTap: () => _pickCustomFonts(context),
                 icon: Icons.insert_drive_file_outlined,
                 title: '自定义字体',
                 subtitle: customLoaded
                     ? '已应用所选字体'
-                    : (customPath.isEmpty ? '选择本地 TTF/OTF 文件' : '字体文件待重新加载'),
+                    : '选择本地 TTF/OTF 文件（可多选按字重区分）',
+                chipLabel: '选择字体',
               ),
-              if (choice == FontChoice.custom && customPath.isNotEmpty)
+              if (choice == FontChoice.custom &&
+                  settings.customFontPaths.any((p) => p.isNotEmpty))
                 Padding(
                   padding: const EdgeInsets.fromLTRB(72, 0, 16, 12),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.folder_open, size: 16, color: scheme.onSurfaceVariant),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          customPath,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(color: scheme.onSurfaceVariant),
-                        ),
-                      ),
+                      for (var i = 0; i < 4; i++)
+                        if (settings.customFontPaths[i].isNotEmpty)
+                          Row(
+                            key: ValueKey('slot-$i'),
+                            children: [
+                              Icon(Icons.folder_open,
+                                  size: 16, color: scheme.onSurfaceVariant),
+                              const SizedBox(width: 8),
+                              Text(
+                                _slotRoleLabel(i),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(color: scheme.primary),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _baseName(settings.customFontPaths[i]),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(color: scheme.onSurfaceVariant),
+                                ),
+                              ),
+                            ],
+                          ),
                     ],
                   ),
                 ),
@@ -423,6 +476,7 @@ class _FontRadioTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.onTap,
+    this.chipLabel = '选择文件',
   });
 
   final FontChoice value;
@@ -432,6 +486,9 @@ class _FontRadioTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback? onTap;
 
+  /// 选择类选项的行尾按钮文案（默认「选择文件」；自定义字体为「选择字体」）。
+  final String chipLabel;
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
@@ -440,12 +497,203 @@ class _FontRadioTile extends StatelessWidget {
       subtitle: Text(subtitle),
       trailing: onTap != null
           ? ChoiceChip(
-              label: const Text('选择文件'),
+              label: Text(chipLabel),
               selected: isSelected,
               onSelected: (_) => onTap?.call(),
             )
           : Radio<FontChoice>(value: value),
       onTap: onTap,
+    );
+  }
+}
+
+/// 4 槽位（regular/medium/bold/black）的本地化角色标签。
+String _slotRoleLabel(int index) {
+  switch (index) {
+    case 0:
+      return 'Regular';
+    case 1:
+      return 'Medium';
+    case 2:
+      return 'Bold';
+    default:
+      return 'Black';
+  }
+}
+
+/// 取文件路径末段（去目录与扩展名）作为展示名。
+String _baseName(String path) {
+  final last = path.split(Platform.pathSeparator).last;
+  final dot = last.lastIndexOf('.');
+  return dot > 0 ? last.substring(0, dot) : last;
+}
+
+/// 自定义字体「多字重预览确认」对话框。
+///
+/// 先用临时预览族渲染样例文本（不影响正式族 [FontManager.kCustomFamily]），
+/// 让用户核对/调整 4 槽位（regular/medium/bold/black）各自的字体文件归属；
+/// 确认后返回 4 槽位路径数组（按 [FontRole] 顺序），取消返回 null。
+class _CustomFontConfirmDialog extends StatefulWidget {
+  const _CustomFontConfirmDialog({
+    required this.sourcePaths,
+    required this.initialSlots,
+    required this.previewFamily,
+  });
+
+  /// 用户本次挑选到的源文件路径集合（用于槽位下拉选择）。
+  final List<String> sourcePaths;
+
+  /// [FontManager.autoAssignRoles] 自动推断得到的初始 4 槽位分配。
+  final List<String> initialSlots;
+
+  /// 临时预览族名（与正式族分离，避免预览期误写正式字体）。
+  final String previewFamily;
+
+  @override
+  State<_CustomFontConfirmDialog> createState() => _CustomFontConfirmDialogState();
+}
+
+class _CustomFontConfirmDialogState extends State<_CustomFontConfirmDialog> {
+  late List<String> _slots;
+  bool _previewReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _slots = [
+      for (var i = 0; i < 4; i++)
+        (i < widget.initialSlots.length && widget.initialSlots[i].isNotEmpty)
+            ? widget.initialSlots[i]
+            : '',
+    ];
+    // 注册临时预览族（失败不影响对话框使用）。
+    FontManager().loadCustomFontPreview(
+      widget.initialSlots.where((s) => s.isNotEmpty).toList(),
+      widget.previewFamily,
+    ).then((_) {
+      if (mounted) setState(() => _previewReady = true);
+    });
+  }
+
+  void _setSlot(int index, String path) {
+    setState(() {
+      _slots[index] = path;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    // 样例文本用预览族渲染，直观对比各字重效果。
+    final previewFamily = widget.previewFamily;
+
+    return Dialog(
+      backgroundColor: scheme.surfaceContainerHigh,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text('应用自定义字体（多字重）',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 8),
+            // 预览区：用临时预览族渲染样例，字重从 Regular 到 Black。
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: scheme.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var w = 0; w < 4; w++)
+                    Text(
+                      '汉水相融 · 字重 ${_slotRoleLabel(w)}',
+                      style: TextStyle(
+                        fontFamily: _previewReady ? previewFamily : null,
+                        fontWeight: [
+                          FontWeight.w400,
+                          FontWeight.w500,
+                          FontWeight.w700,
+                          FontWeight.w900
+                        ][w],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // 4 槽位归属调整（下拉选择本批次文件，或留空）。
+            for (var i = 0; i < 4; i++)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 64,
+                      child: Text(
+                        _slotRoleLabel(i),
+                        style: Theme.of(context)
+                            .textTheme
+                            .labelMedium
+                            ?.copyWith(color: scheme.primary),
+                      ),
+                    ),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _slots[i],
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: '',
+                            child: Text('（不使用）'),
+                          ),
+                          for (final p in widget.sourcePaths)
+                            DropdownMenuItem<String>(
+                              value: p,
+                              child: Text(_baseName(p),
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                        ],
+                        onChanged: (v) => _setSlot(i, v ?? ''),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('取消'),
+                ),
+                const SizedBox(width: 8),
+                FilledButton(
+                  onPressed: () {
+                    // 至少要有一个槽位非空才允许应用。
+                    if (!_slots.any((s) => s.isNotEmpty)) {
+                      return;
+                    }
+                    Navigator.of(context).pop(_slots);
+                  },
+                  child: const Text('应用'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

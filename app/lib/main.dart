@@ -74,7 +74,7 @@ Future<void> main() async {
   // 后台下载并注册 HarmonyOS 中文字体，不阻塞首帧；失败时主题回退系统字体。
   // 必须先于 runApp 之后调用，确保 WidgetsBinding 可用且首帧立即出现。
   FontManager().ensureLoaded().then((_) {
-    // 本次确实下载过鸿蒙字体 → 提示重启，保证渲染稳定生效。
+    // 本次确实下载过鸿蒙字体 → 弹出「字体已就绪」可选提示（默认无需重启）。
     if (FontManager().didDownloadThisRun) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         kAppNavigatorKey.currentState?.push(
@@ -91,10 +91,10 @@ Future<void> main() async {
     }
   });
 
-  // 若用户此前选择了自定义字体，启动时按持久化路径自动加载。
+  // 若用户此前选择了自定义字体，启动时按持久化的 4 槽位路径自动加载。
   final settings = SettingsController();
   if (settings.fontChoice == FontChoice.custom) {
-    FontManager().loadSavedCustomFont(settings.customFontPath);
+    FontManager().loadSavedCustomFontSlots(settings.customFontPaths);
   }
 }
 
@@ -125,12 +125,13 @@ class EmoteApp extends StatelessWidget {
                 : null;
 
             // 按用户选择的字体来源解析界面字体族：
-            // - system：始终用系统默认字体（null）；
-            // - custom：用设置里选择的自定义字体；
+            // - system：解析为平台默认族（Windows→微软雅黑、Linux→Noto CJK 系、
+            //   移动端→null 跟随系统）；
+            // - custom：用设置里选择的自定义字体（多字重同族注册）；
             // - harmony：鸿蒙字体加载成功才用，否则回退系统字体（不阻塞首帧）。
             final font = FontManager();
             final String? fontFamily = switch (settings.fontChoice) {
-              FontChoice.system => null,
+              FontChoice.system => FontManager.defaultFamilyForPlatform(),
               FontChoice.custom => font.customFontFamily,
               FontChoice.harmony =>
                 font.isReady ? font.fontFamily : null,
@@ -408,14 +409,15 @@ class _RestartPromptDialog extends StatelessWidget {
             Icon(Icons.font_download_outlined,
                 color: scheme.primary, size: 28),
             const SizedBox(height: 12),
-            Text('中文字体下载完成',
+            Text('中文字体已就绪',
                 style: Theme.of(context)
                     .textTheme
                     .titleMedium
                     ?.copyWith(fontWeight: FontWeight.w600)),
             const SizedBox(height: 8),
             Text(
-              'HarmonyOS 字体已下载并安装到本地。为让所有界面稳定应用新字体，建议重启应用',
+              'HarmonyOS 字体已下载并完成注册，当前界面已即时应用。'
+              '通常无需重启；若个别文本仍有渲染残留，可重启应用彻底刷新。',
               style: Theme.of(context)
                   .textTheme
                   .bodyMedium
@@ -425,13 +427,13 @@ class _RestartPromptDialog extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                FilledButton(onPressed: () => _restartApp(context),
+                    child: const Text('重启应用')),
+                const SizedBox(width: 8),
                 TextButton(
                   onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('稍后'),
+                  child: const Text('保持现状'),
                 ),
-                const SizedBox(width: 8),
-                FilledButton(onPressed: () => _restartApp(context),
-                    child: const Text('立即重启')),
               ],
             ),
           ],

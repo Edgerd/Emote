@@ -86,6 +86,20 @@ class FontManager extends ChangeNotifier {
   /// 返回 null 时，[main.dart] 保持 `ThemeData.fontFamily` 为 null，引擎回退到
   /// 平台默认字体，避免在 Windows/Linux 上错误回退到 Roboto（无 CJK 字形）。
   static String? defaultFamilyForPlatform() {
+    // 缓存：build() 每次重建都会调用本方法，而 Linux 分支会触发 `fc-match` 子进程，
+    // 绝不能每帧都跑——首次解析后缓存结果，后续直接返回。
+    if (_defaultFamilyCache != null || _defaultFamilyComputed) {
+      return _defaultFamilyCache;
+    }
+    _defaultFamilyCache = _resolveDefaultFamily();
+    _defaultFamilyComputed = true;
+    return _defaultFamilyCache;
+  }
+
+  static String? _defaultFamilyCache;
+  static bool _defaultFamilyComputed = false;
+
+  static String? _resolveDefaultFamily() {
     if (Platform.isWindows) return 'Microsoft YaHei';
     if (Platform.isLinux) {
       // 常见发行版默认安装的 Noto CJK 包：优先 SC，其次任一可用。
@@ -101,7 +115,7 @@ class FontManager extends ChangeNotifier {
     return null;
   }
 
-  /// Linux 下通过 `fc-match` 探测某字体族是否已安装（3 秒超时，失败视为无）。
+  /// Linux 下通过 `fc-match` 探测某字体族是否已安装（失败视为无）。
   static bool _linuxHasFontFamily(String family) {
     try {
       final result = Process.runSync(
@@ -109,9 +123,9 @@ class FontManager extends ChangeNotifier {
         ['-f', '%{family}', family],
         runInShell: false,
       );
-      // fc-match 总是返回「最接近」的族名；若与请求相同说明已安装。
+      // fc-match 总是返回「最接近」的族名；与请求相同才说明该族已安装。
       final out = result.stdout.toString().trim();
-      return out.isNotEmpty && out != family && false || out == family;
+      return out.isNotEmpty && out == family;
     } catch (_) {
       return false;
     }
@@ -147,6 +161,30 @@ class FontManager extends ChangeNotifier {
     await loadCustomFont(path);
   }
 
+  /// 启动时按 4 槽位加载已保存的自定义字体（[SettingsController.customFontPaths]）。
+  ///
+  /// 仅当存在可读的槽位文件时才注册；全空则静默返回（不误报）。与 [loadCustomFontSlots]
+  /// 不同，本方法「只读」不做落盘回写，避免启动时重复复制与持久化抖动。
+  Future<void> loadSavedCustomFontSlots(List<String> paths) async {
+    final present = paths
+        .where((p) => p.isNotEmpty && File(p).existsSync())
+        .toList();
+    if (present.isEmpty) return;
+    try {
+      final loader = FontLoader(kCustomFamily);
+      for (final p in present) {
+        final bytes = File(p).readAsBytesSync();
+        loader.addFont(Future.value(ByteData.sublistView(bytes)));
+      }
+      await loader.load();
+      _customFontFamily = kCustomFamily;
+      notifyListeners();
+      AppLog().info('字体', '启动加载自定义字体 ${present.length}/4 槽位成功');
+    } catch (e) {
+      AppLog().error('字体', '启动加载自定义字体失败：$e');
+    }
+  }
+
   /// 从任意路径加载自定义字体文件并注册到 Flutter；成功返回 true，失败返回 false。
   ///
   /// 为兼容各平台直接读取权限差异（Windows / Linux 可直接读源路径；Android 需
@@ -176,11 +214,115 @@ class FontManager extends ChangeNotifier {
     }
   }
 
+  /// 从多字重「角色槽位」加载自定义字体并注册到同一族 [kCustomFamily]。
+  ///
+  /// [sourcePaths] 按 [SettingsController] 的 4 槽位顺序（regular/medium/bold/black）
+  /// 提供；空槽位跳过。各字重文件携带自身 OS/2 字重元数据，统一注册到 `EmoteCustomFont`
+  /// 后，引擎按 `TextStyle.fontWeight` 自动命中最近已注册字重。成功后将缓存副本路径
+  /// 回写 [SettingsController.customFontPaths]（旧单键由控制器自动镜像首槽）。
+  Future<bool> loadCustomFontSlots(List<String> sourcePaths) async {
+    final slots = <String>[
+      for (var i = 0; i < 4; i++)
+        (i < sourcePaths.length && sourcePaths[i].isNotEmpty)
+            ? sourcePaths[i]
+            : '',
+    ];
+    if (!slots.any((s) => s.isNotEmpty)) {
+      clearCustomFont();
+      await SettingsController().setCustomFontPaths(slots);
+      return false;
+    }
+    try {
+      final dir = await getApplicationSupportDirectory();
+      final cacheDir = Directory('${dir.path}/custom_font');
+      cacheDir.createSync(recursive: true);
+      final loader = FontLoader(kCustomFamily);
+      var loadedAny = false;
+      for (var i = 0; i < slots.length; i++) {
+        final src = slots[i];
+        if (src.isEmpty) continue;
+        final target = File('${cacheDir.path}/custom_slot_${i}.ttf');
+        final bytes = File(src).readAsBytesSync();
+        target.writeAsBytesSync(bytes, flush: true);
+        slots[i] = target.path; // 持久化缓存副本路径
+        loader.addFont(Future.value(ByteData.sublistView(bytes)));
+        loadedAny = true;
+      }
+      if (loadedAny) {
+        await loader.load();
+        _customFontFamily = kCustomFamily;
+      }
+      await SettingsController().setCustomFontPaths(slots);
+      notifyListeners();
+      AppLog().info(
+        '字体',
+        '自定义字体多字重加载成功：${slots.where((s) => s.isNotEmpty).length}/4 槽位',
+      );
+      return loadedAny;
+    } catch (e) {
+      AppLog().error('字体', '自定义字体多字重加载失败：$e');
+      return false;
+    }
+  }
+
   /// 清除自定义字体（切回其它字体来源时调用）。
   void clearCustomFont() {
     if (_customFontFamily == null) return;
     _customFontFamily = null;
     notifyListeners();
+  }
+
+  /// 将 [sourcePaths] 按 [SettingsController] 的 4 槽位顺序（regular/medium/bold/black）
+  /// 自动推断字重并分派到对应角色槽位；空槽位保持空串。
+  ///
+  /// 用户批量选择多个字体文件后调用：先据此预填 4 槽位，再交由确认弹窗让用户核对/调整。
+  List<String> autoAssignRoles(List<String> sourcePaths) {
+    const target = [400, 500, 700, 900]; // 对应 regular/medium/bold/black
+    final slots = <String>['', '', '', ''];
+    for (final p in sourcePaths) {
+      if (p.isEmpty) continue;
+      final w = inferWeight(p);
+      var best = 0;
+      var bestDist = 1 << 30;
+      for (var i = 0; i < target.length; i++) {
+        final d = (w - target[i]).abs();
+        // 距离更近者优先；距离相同时优先落到仍为空的槽位，避免覆盖已填槽。
+        if (d < bestDist ||
+            (d == bestDist && slots[i].isEmpty && slots[best].isNotEmpty)) {
+          best = i;
+          bestDist = d;
+        }
+      }
+      slots[best] = p;
+    }
+    return slots;
+  }
+
+  /// 依据文件名关键字推断字重数值（越接近 CSS 命名越精确）。
+  static int inferWeight(String filename) {
+    final name = filename.toLowerCase();
+    if (name.contains('extrabold') || name.contains('black')) return 900;
+    if (name.contains('semibold')) return 600;
+    if (name.contains('bold')) return 700;
+    if (name.contains('medium')) return 500;
+    if (name.contains('extralight')) return 200;
+    if (name.contains('light') || name.contains('thin')) return 300;
+    return 400; // Regular / 未识别字重默认
+  }
+
+  /// 将 [sourcePaths] 以临时族名 [previewFamily] 注册（不落盘、不持久化），
+  /// 供确认弹窗在应用正式 4 槽位前先「预览」效果；预览族与正式族 [kCustomFamily] 分离。
+  Future<void> loadCustomFontPreview(
+    List<String> sourcePaths,
+    String previewFamily,
+  ) async {
+    final loader = FontLoader(previewFamily);
+    for (final p in sourcePaths) {
+      if (p.isEmpty) continue;
+      final bytes = File(p).readAsBytesSync();
+      loader.addFont(Future.value(ByteData.sublistView(bytes)));
+    }
+    await loader.load();
   }
 
   /// 开发者调试：HarmonyOS 与自定义字体的缓存目录路径（不存在则返回其应建路径）。
@@ -323,6 +465,8 @@ class FontManager extends ChangeNotifier {
       }
 
       // 常见 CJK 字体文件名特征（小写匹配）。
+      // 注意：`noto` 这类宽匹配会误判 Noto Latin（无 CJK 字形）为「已具备 CJK」，
+      // 导致 Linux 缺中文字体时跳过下载、中文方框——故收紧为「noto … cjk」等具体前缀。
       const cjkHints = <String>[
         'harmony', // 鸿蒙系统字体（SC/TC）
         'simsun', // 宋体
@@ -330,19 +474,24 @@ class FontManager extends ChangeNotifier {
         'simfang', // 仿宋
         'simkai', // 楷体
         'msyh', // 微软雅黑
-        'msjh', // 微軟正黑體
         'microsoftyahei',
-        'deng', // 等线
-        'noto', // Noto CJK
+        'msjh', // 微軟正黑體
+        'dengxian', // 等线
+        'noto sans cjk', // Noto Sans CJK（精确前缀，避免误判 Noto Latin）
+        'noto serif cjk',
+        'noto cjk',
         'sourcehansans', // 思源黑体
+        'sourcehanserif', // 宋体
         'droidsansfallback',
         'wqy', // 文泉驿
         'pingfang', // 苹方
         'hiragino', // 冬青
-        'heiti', // 黑体
+        'heiti', // 黑体（macOS 字体名）
         'songti', // 宋体
         'kaiti', // 楷体
         'fangsong', // 仿宋
+        'uming', // 文鼎宋
+        'ukai', // 标楷
       ];
 
       for (final d in dirs) {
@@ -419,9 +568,10 @@ class FontManager extends ChangeNotifier {
       byWeight[w] = file;
     }
 
-    // 必须存在 Regular，否则整个注册无意义。
-    final regular = byWeight[400];
-    if (regular == null) return;
+    // 加固：即便缺少 400（Regular）字重，只要存在其它字重也照常注册——引擎对
+    // w400/w600 请求会自动选「最近的已注册字重」，避免因包内只有 Bold/Black 等子集
+    // 就整体放弃注册、导致「下载了却不生效」。
+    if (byWeight.isEmpty) return;
 
     final loader = FontLoader(kHarmonyFamily);
     for (final entry in byWeight.entries) {
@@ -429,6 +579,9 @@ class FontManager extends ChangeNotifier {
       loader.addFont(Future.value(ByteData.sublistView(data)));
     }
     await loader.load();
+    if (byWeight[400] == null) {
+      AppLog().warn('字体', 'CJK 包缺少 Regular(400) 字重，已用其余字重注册');
+    }
   }
 
   /// 从已下载的 zip 文件解压到 [outDir]（流式读文件，避免整包驻留内存）。

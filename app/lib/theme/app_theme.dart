@@ -15,7 +15,11 @@ class AppTheme {
   AppTheme._();
 
   /// 基于 [scheme] 构建完整 ThemeData（M3 + 组件主题 + M3E 排版）。
-  /// [fontFamily] 传入加载成功的字体族（如 "HarmonyOS Sans"），null 时使用 Roboto。
+  ///
+  /// [fontFamily] 是全部界面文本字体的**唯一入口**：同时写入 `ThemeData.fontFamily`
+  /// 与 [buildM3ETextTheme] 的排版，各页面禁止再在 `TextStyle` 上逐处指定 `fontFamily`
+  /// （日志等等宽数据展示除外）。传 null 时引擎回退到平台默认字体（Windows/Linux
+  /// 由 [FontManager.defaultFamilyForPlatform] 指定族名兜底，避免误落 Roboto 无 CJK）。
   static ThemeData build(ColorScheme scheme, {String? fontFamily}) {
     final base = ThemeData(
       useMaterial3: true,
