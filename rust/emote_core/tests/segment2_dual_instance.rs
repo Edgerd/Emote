@@ -156,10 +156,18 @@ async fn quic_dual_instance_establishes_and_streams() {
 
 // ---------- 3. QUIC 建连失败回退 TCP（manager 级） ----------
 
-#[tokio::test]
-async fn quic_failure_falls_back_to_tcp() {
-    // 存活的 TCP 监听作为回退目标（manager 用自己的运行时连接它）。
-    let listener = tcp::bind("127.0.0.1:0".parse().unwrap()).await.expect("TCP bind 失败");
+#[test]
+fn quic_failure_falls_back_to_tcp() {
+    // manager 内部自建多线程运行时并 block_on，故本用例须在**同步**线程中运行
+    // （放在 #[tokio::test] 内会触发「runtime 套 runtime」）。用一次性 current-thread
+    // 运行时承载回退目标的 TCP 监听。
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("临时运行时创建失败");
+    let listener = rt
+        .block_on(tcp::bind("127.0.0.1:0".parse().unwrap()))
+        .expect("TCP bind 失败");
     let tcp_port = listener.local_addr().unwrap().port();
 
     let manager = ConnectionManager::with_config(ConnectionConfig {
@@ -179,17 +187,25 @@ async fn quic_failure_falls_back_to_tcp() {
 
     manager.disconnect("fb").expect("断开失败");
     wait_state(&manager, "fb", ConnectionState::Disconnected);
-    println!("QUIC 回退 TCP 通过：死端口 QUIC 建连失败后自动落到 TCP 且断开生效");
+
+    drop(listener);
+    drop(manager);
+    drop(rt);
+    println!("QUIC 回退 TCP 通过：死端口 QUIC 建连失败后自动落到 TCP，断开生效");
 }
 
 // ---------- 4. 多连接并行且独立关闭（manager 级） ----------
 
-#[tokio::test]
-async fn multi_connection_parallel_independent_close() {
-    // 3 台 loopback「远端设备」。
-    let l0 = tcp::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
-    let l1 = tcp::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
-    let l2 = tcp::bind("127.0.0.1:0".parse().unwrap()).await.unwrap();
+#[test]
+fn multi_connection_parallel_independent_close() {
+    // 3 台 loopback「远端设备」；同测试 3，用独立运行时承载监听（避免嵌套 block_on）。
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("临时运行时创建失败");
+    let l0 = rt.block_on(tcp::bind("127.0.0.1:0".parse().unwrap())).unwrap();
+    let l1 = rt.block_on(tcp::bind("127.0.0.1:0".parse().unwrap())).unwrap();
+    let l2 = rt.block_on(tcp::bind("127.0.0.1:0".parse().unwrap())).unwrap();
 
     let manager = ConnectionManager::with_config(ConnectionConfig {
         quic_connect_timeout: Duration::from_millis(400),
@@ -220,6 +236,9 @@ async fn multi_connection_parallel_independent_close() {
     wait_state(&manager, "dev-0", ConnectionState::Connected);
     wait_state(&manager, "dev-2", ConnectionState::Connected);
 
+    drop(manager);
+    drop((l0, l1, l2));
+    drop(rt);
     println!("多连接并行通过：3 台设备同时连接互不阻塞，关闭其一不影响其余");
 }
 
