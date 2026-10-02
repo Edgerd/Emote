@@ -83,7 +83,7 @@ class RemoteSessionService extends ChangeNotifier {
     final h = _handle;
     if (h == null) return;
     try {
-      final frame = h.nextFrame(id: _id);
+      final frame = await h.nextFrame(id: _id);
       if (frame != null) {
         _frameWidth = frame.width;
         _frameHeight = frame.height;
@@ -92,7 +92,7 @@ class RemoteSessionService extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      debugPrint('拉取远程帧失败（$id）：$e');
+      debugPrint('拉取远程帧失败（$_id）：$e');
     }
   }
 

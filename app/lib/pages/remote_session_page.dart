@@ -19,18 +19,20 @@ class _RemoteSessionPageState extends State<RemoteSessionPage> {
   final RemoteSessionService _svc = RemoteSessionService();
   bool _started = false;
 
+  late final VoidCallback _onChanged = () {
+    if (mounted) setState(() {});
+  };
+
   @override
   void initState() {
     super.initState();
-    _svc.addListener(() {
-      // 轮询到解码帧 / 状态变化时刷新 UI。
-      if (mounted) setState(() {});
-    });
+    // 轮询到解码帧 / 状态变化时刷新 UI。
+    _svc.addListener(_onChanged);
   }
 
   @override
   void dispose() {
-    _svc.removeListener(() {});
+    _svc.removeListener(_onChanged);
     _svc.stop();
     super.dispose();
   }
