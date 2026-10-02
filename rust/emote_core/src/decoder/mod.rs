@@ -2,6 +2,10 @@
 //!
 //! 与 `encoder` 对称：openh264 仅桌面 target 链接，`OpenH264Decoder` 以 `#[cfg(desktop)]`
 //! 隔离；Android 上 `decoder_available()` 返回 `false`，上层返回「codec_not_available」不 panic。
+//!
+//! 第 4.3 段：引入 `VideoDecoder` trait 抽象，允许未来替换 ffmpeg-next / 硬件后端。
+
+use anyhow::Result;
 
 /// 一帧解码画面（RGBA8，长度 = `width*height*4`）。
 #[derive(Debug, Clone)]
@@ -9,6 +13,18 @@ pub struct DecodedFrame {
     pub width: u32,
     pub height: u32,
     pub rgba: Vec<u8>,
+}
+
+/// 视频解码器统一抽象（第 4.3 段）。
+///
+/// 当前唯一实现：`OpenH264Decoder`（桌面 target）。
+/// 未来可添加 ffmpeg-next（feature-gate）或硬件加速解码器（4.4 段）。
+pub trait VideoDecoder: Send + Sync {
+    /// 解码一段 AnnexB 数据，输出 RGBA8 帧（本次数据不足时返回 `None`）。
+    fn decode(&mut self, annexb: &[u8]) -> Result<Option<DecodedFrame>>;
+
+    /// 解码器名称（用于日志/调试）。
+    fn name(&self) -> &'static str;
 }
 
 /// 当前 target 是否可用软解码后端（openh264 已链接）。
@@ -22,7 +38,7 @@ mod desktop_impl {
     use openh264::decoder::Decoder;
     use openh264::OpenH264API;
 
-    use super::DecodedFrame;
+    use super::{DecodedFrame, VideoDecoder};
 
     /// 基于 openh264 的 H.264 软解码器（输入 AnnexB，输出 RGBA8）。
     pub struct OpenH264Decoder {
@@ -64,6 +80,16 @@ mod desktop_impl {
         /// 依 SPS 提取分辨率（复用 `codec`/scrcpy 的 h264 解析）。
         pub fn resolution_from_sps(sp: &[u8]) -> Option<(u32, u32)> {
             scrcpy_protocol::h264::extract_resolution_from_stream(sp)
+        }
+    }
+
+    /// 通过 `VideoDecoder` trait 使用（第 4.3 段抽象）。
+    impl VideoDecoder for OpenH264Decoder {
+        fn decode(&mut self, annexb: &[u8]) -> anyhow::Result<Option<DecodedFrame>> {
+            OpenH264Decoder::decode(self, annexb)
+        }
+        fn name(&self) -> &'static str {
+            "openh264"
         }
     }
 }

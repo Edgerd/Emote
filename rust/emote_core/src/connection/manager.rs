@@ -53,6 +53,8 @@ pub struct ConnectionManager {
     quic_endpoint: quinn::Endpoint,
     runtime: tokio::runtime::Runtime,
     cfg: ConnectionConfig,
+    /// 每设备的重连管理器（第 4.6 段）。
+    reconnects: DashMap<String, crate::connection::reconnect::ReconnectManager>,
 }
 
 impl ConnectionManager {
@@ -79,6 +81,7 @@ impl ConnectionManager {
             quic_endpoint,
             runtime,
             cfg,
+            reconnects: DashMap::new(),
         })
     }
 
@@ -105,7 +108,44 @@ impl ConnectionManager {
             return Ok(());
         };
         let _ = conn.1.tx.send(Outbound::Close);
+        self.reconnects.remove(id);
         Ok(())
+    }
+
+    /// 断线后自动重连（第 4.6 段）：调用方在检测到 `Disconnected` 状态后触发。
+    ///
+    /// 返回 `Ok(true)` 表示重连成功；`Ok(false)` 表示可继续重试（退避中）；
+    /// `Err` 表示已超出最大重试次数。
+    pub fn try_reconnect(&self, dev: &DeviceInfo) -> Result<bool> {
+        let mut rm = self
+            .reconnects
+            .entry(dev.id.clone())
+            .or_insert_with(Default::default);
+
+        if !rm.can_retry() {
+            return Err(anyhow::anyhow!("设备 {} 已超出最大重连次数", dev.id));
+        }
+        let delay = rm.next_delay();
+        std::thread::sleep(delay);
+
+        // 先清理旧连接状态。
+        self.connections.remove(&dev.id);
+        match self.runtime.block_on(self.connect_async(dev)) {
+            Ok(target) => {
+                rm.reset();
+                let conn_state = target.shared.get().state;
+                self.connections.insert(dev.id.clone(), target);
+                Ok(conn_state == crate::protocol::ConnectionState::Connected)
+            }
+            Err(e) => {
+                tracing::warn!(id = %dev.id, error = %e, attempt = rm.current_attempt(), "重连失败");
+                if rm.can_retry() {
+                    Ok(false)
+                } else {
+                    Err(anyhow::anyhow!("设备 {} 重连失败: {e}（已耗尽重试次数）", dev.id))
+                }
+            }
+        }
     }
 
     /// 查询指定设备连接状态。

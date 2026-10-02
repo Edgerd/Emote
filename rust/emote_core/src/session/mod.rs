@@ -35,6 +35,8 @@ pub enum SessionState {
     #[default]
     Stopped,
     Running,
+    /// 断线自动重连中（第 4.6 段）。
+    Reconnecting,
     /// 因缺少能力（codec/捕获/输入）而优雅结束。
     Ended,
 }
