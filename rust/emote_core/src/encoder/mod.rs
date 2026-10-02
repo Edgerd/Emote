@@ -5,6 +5,8 @@
 //! Android target 不编译 openh264，`encoder_available()` 返回 `false`，上层据此
 //! 返回「codec_not_available」而非 panic。
 
+pub mod qos;
+
 /// 当前 target 是否可用软编码后端（openh264 已链接）。
 #[must_use]
 pub fn encoder_available() -> bool {

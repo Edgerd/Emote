@@ -32,6 +32,7 @@ futures = "0.3"                                       # QUIC async 并发
 dashmap = "6"                                         # 连接管理器并发容器
 tracing = "0.1"                                       # 诊断日志（轻量）
 sha2 = "0.10"                                         # QUIC 证书指纹（SHA-256）严格校验
+fastrand = "2"                                        # 第4.6段 重连抖动（无锁、无 rand 全局态）
 
 # ---- 第 3 段：核心功能 ----
 scrcpy-protocol = "0.1.1"                             # 第3.1段 scrcpy 协议层（VideoPacket/ControlSender/h264）

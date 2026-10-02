@@ -9,7 +9,10 @@ import '../widgets/remote_view.dart';
 /// 默认以 `DesktopFrom` 方向 + 本机合成源跑通「捕获→编码→（通道）→解码→渲染」，
 /// 无真机/无显示也能离线演示；输入下发经 Rust 侧探测降级（不崩溃）。
 class RemoteSessionPage extends StatefulWidget {
-  const RemoteSessionPage({super.key});
+  const RemoteSessionPage({super.key, this.sessionId});
+
+  /// 会话 ID（多标签场景下区分）。
+  final String? sessionId;
 
   @override
   State<RemoteSessionPage> createState() => _RemoteSessionPageState();
@@ -42,7 +45,12 @@ class _RemoteSessionPageState extends State<RemoteSessionPage> {
       await _svc.stop();
       setState(() => _started = false);
     } else {
-      await _svc.start(width: 320, height: 240, direction: SessionDirection.desktopFrom);
+      await _svc.start(
+        id: widget.sessionId,
+        width: 320,
+        height: 240,
+        direction: SessionDirection.desktopFrom,
+      );
       setState(() => _started = true);
     }
   }

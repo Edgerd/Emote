@@ -63,8 +63,13 @@ impl ConnectionManager {
 
     /// 以自定义参数创建管理器（测试注入短周期心跳/超时）。
     pub fn with_config(cfg: ConnectionConfig) -> Result<Self> {
+        let ncpu = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(2);
         let runtime = tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(2)
+            .worker_threads(ncpu)
+            .max_blocking_threads(ncpu * 2)
+            .thread_name("emote-worker")
             .enable_all()
             .build()
             .context("创建 tokio 运行时失败")?;
