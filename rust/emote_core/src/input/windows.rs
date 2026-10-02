@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+    SendInput, VIRTUAL_KEY, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
 };
 
 use crate::input::{InputEvent, InputSink};
@@ -25,16 +25,21 @@ impl InputSink for SendInputSink {
                     dwType: INPUT_KEYBOARD,
                     u: unsafe {
                         std::mem::zeroed::<_>().ki = KEYBDINPUT {
-                            wVk: *keycode as u16,
-                            wScanCode: 0,
-                            dwFlags: if *down { 0 } else { KEYEVENTF_KEYUP },
+                            wVk: VIRTUAL_KEY(*keycode as u16),
+                            wScan: 0,
+                            dwFlags: if *down {
+                                windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS(0)
+                            } else {
+                                KEYEVENTF_KEYUP
+                            },
                             time: 0,
                             dwExtraInfo: 0,
                         };
                         std::mem::zeroed()
                     },
                 }];
-                let _ = unsafe { SendInput(1, inputs.as_ptr(), std::mem::size_of::<INPUT>() as i32) };
+                let _ =
+                    unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
             }
             // 触摸/滚动/文本：SendInput 支持但本段保守跳过（键码注入为主）。
             _ => {}
