@@ -649,15 +649,14 @@ class FontManager extends ChangeNotifier {
 
     final client = HttpClient()
       ..connectionTimeout = timeout
-      ..idleTimeout = timeout
-      ..followRedirects = false;
+      ..idleTimeout = timeout;
     try {
       final target = Uri.parse(url);
       final resp =
           await _openWhitelisted(client, target, maxRedirects: 3);
       if (resp.statusCode != 200) {
         throw HttpException('下载字体失败：HTTP ${resp.statusCode}',
-            uri: resp.request.uri);
+            uri: target);
       }
       final total = int.tryParse(
           resp.headers.value(HttpHeaders.contentLengthHeader) ?? '') ??
@@ -725,11 +724,12 @@ class FontManager extends ChangeNotifier {
             uri: url);
       }
       final req = await client.getUrl(url).timeout(Duration(seconds: 30));
+      req.followRedirects = false;
       final resp = await req.close().timeout(Duration(seconds: 120));
       final code = resp.statusCode;
       if (code >= 300 && code < 400) {
         final location = resp.headers.value(HttpHeaders.locationHeader);
-        resp.close();
+        await resp.drain(); // 丢弃 3xx 响应体
         if (location == null || i + 1 > maxRedirects) {
           throw HttpException(
               '字体下载重定向被拒绝（${location ?? '无 Location 头'}），防止跳出白名单',
