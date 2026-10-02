@@ -4,6 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import '../services/app_log.dart';
 import '../services/harmony_font_loader.dart';
 import 'about_page.dart';
+import 'remote_session_page.dart';
 import 'settings_page.dart';
 
 /// 「更多」页：以参考图式**分组圆角列表**承载本地/支持/系统入口。
@@ -105,6 +106,12 @@ class _MorePageState extends State<MorePage> {
     );
   }
 
+  void _openRemoteSession() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const RemoteSessionPage()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -159,6 +166,12 @@ class _MorePageState extends State<MorePage> {
             const SizedBox(height: 24),
             _MoreGroupHeader('更多'),
             _GroupCard(children: [
+              _MoreTile(
+                icon: Icons.desktop_windows_outlined,
+                title: '远程会话',
+                subtitle: '演示三方向远控会话与画面渲染管线',
+                onTap: _openRemoteSession,
+              ),
               _MoreTile(
                 icon: Icons.settings_outlined,
                 title: '设置',
