@@ -6,5 +6,14 @@
 import 'frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-/// 当前生效的传输层。
-enum ActiveTransport { quic, tcp }
+/// H.264 帧类型（与 `openh264` 及 scrcpy 帧标志语义一致）。
+enum H264FrameType {
+  /// 关键帧（IDR / Idr，可独立解码）。
+  idr,
+
+  /// 非关键帧（P 帧）。
+  nonIdr,
+
+  /// 未知 / 未标记。
+  unknown,
+}

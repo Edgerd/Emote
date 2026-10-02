@@ -6,22 +6,17 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-
-            
-
-            
-
-            /// 统一消息类型。
+/// 统一消息类型。
 enum MessageType {
-                    /// 心跳（双向）。
-heartbeat,
-/// 通用控制消息（如握手、会话协商）。
-control,
-/// 视频数据流（第 3 段起使用）。
-video,
-/// 输入注入命令（第 3 段起使用）。
-input,
-                    ;
-                    
-                }
-            
+  /// 心跳（双向）。
+  heartbeat,
+
+  /// 通用控制消息（如握手、会话协商）。
+  control,
+
+  /// 视频数据流（第 3 段起使用）。
+  video,
+
+  /// 输入注入命令（第 3 段起使用）。
+  input,
+}

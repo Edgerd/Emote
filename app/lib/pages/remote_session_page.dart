@@ -19,9 +19,9 @@ class _RemoteSessionPageState extends State<RemoteSessionPage> {
   final RemoteSessionService _svc = RemoteSessionService();
   bool _started = false;
 
-  late final VoidCallback _onChanged = () {
+  void _onChanged() {
     if (mounted) setState(() {});
-  };
+  }
 
   @override
   void initState() {

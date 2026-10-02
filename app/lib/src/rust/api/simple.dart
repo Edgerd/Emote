@@ -6,14 +6,9 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-
-            
-
-            /// 返回一条问候语，证明 Dart 能同步拿到 Rust 的返回值。
+/// 返回一条问候语，证明 Dart 能同步拿到 Rust 的返回值。
 ///
 /// 修改此处返回值并重新运行 `flutter_rust_bridge_codegen generate`，
 /// Flutter 侧 `greet` 的返回将同步变化。
-Future<String>  greet({required String name }) => RustLib.instance.api.crateApiSimpleGreet(name: name);
-
-            
-            
+Future<String> greet({required String name}) =>
+    RustLib.instance.api.crateApiSimpleGreet(name: name);
