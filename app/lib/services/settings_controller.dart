@@ -80,6 +80,7 @@ class SettingsController extends ChangeNotifier {
   static const _kReduceMotion = 'settings.reduceMotion';
   static const _kContentDensity = 'settings.contentDensity';
   static const _kTransportPref = 'settings.transportPref';
+  static const _kLanOnly = 'settings.lanOnly';
 
   ThemeMode _mode = ThemeMode.system;
   Color _seedColor = kDefaultSeedColor;
@@ -91,6 +92,8 @@ class SettingsController extends ChangeNotifier {
   bool _reduceMotion = false;
   ContentDensity _contentDensity = ContentDensity.comfortable;
   TransportPref _transportPref = TransportPref.auto;
+  /// 纯局域网模式：true 时禁止任何公网下载（HarmonyOS 字体包），仅用系统默认字体。
+  bool _lanOnly = false;
 
   ThemeMode get mode => _mode;
   Color get seedColor => _seedColor;
@@ -102,6 +105,7 @@ class SettingsController extends ChangeNotifier {
   bool get reduceMotion => _reduceMotion;
   ContentDensity get contentDensity => _contentDensity;
   TransportPref get transportPref => _transportPref;
+  bool get lanOnly => _lanOnly;
 
   /// 桌面端默认关闭动态颜色，Android 默认开启。
   bool _defaultDynamicColor() {
@@ -127,6 +131,7 @@ class SettingsController extends ChangeNotifier {
     _reduceMotion = prefs.getBool(_kReduceMotion) ?? false;
     _contentDensity = _densityFromIndex(prefs.getInt(_kContentDensity));
     _transportPref = _transportFromIndex(prefs.getInt(_kTransportPref));
+    _lanOnly = prefs.getBool(_kLanOnly) ?? false;
     notifyListeners();
   }
 
@@ -258,6 +263,7 @@ class SettingsController extends ChangeNotifier {
     await prefs.setBool(_kReduceMotion, _reduceMotion);
     await prefs.setInt(_kContentDensity, _densityToIndex(_contentDensity));
     await prefs.setInt(_kTransportPref, _transportToIndex(_transportPref));
+    await prefs.setBool(_kLanOnly, _lanOnly);
   }
 
   Future<void> setThemeMode(ThemeMode value) async {
@@ -346,6 +352,14 @@ class SettingsController extends ChangeNotifier {
     await _save();
   }
 
+  /// 设置纯局域网模式（true 时禁止公网字体下载，仅用系统默认字体）。
+  Future<void> setLanOnly(bool value) async {
+    if (_lanOnly == value) return;
+    _lanOnly = value;
+    notifyListeners();
+    await _save();
+  }
+
   /// 将「本设置控制器」的全部持久化项复位为默认值。
   ///
   /// 只负责 settings.* 键；字体缓存与开发者模式（分属 [FontManager] / 
@@ -360,6 +374,7 @@ class SettingsController extends ChangeNotifier {
     _reduceMotion = false;
     _contentDensity = ContentDensity.comfortable;
     _transportPref = TransportPref.auto;
+    _lanOnly = false;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_kThemeMode);
@@ -371,5 +386,6 @@ class SettingsController extends ChangeNotifier {
     await prefs.remove(_kReduceMotion);
     await prefs.remove(_kContentDensity);
     await prefs.remove(_kTransportPref);
+    await prefs.remove(_kLanOnly);
   }
 }

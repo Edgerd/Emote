@@ -41,6 +41,7 @@ dependencies:
   archive: ^3.6.1
   file_picker: ^8.3.5
   package_info_plus: ^8.0.0
+  crypto: ^3.0.7 # SHA-256（字体包完整性校验）
 
   # ---- 预留依赖位置（本段不启用，后续分段启用）----
   # ffmpeg（可选回退）：不启用

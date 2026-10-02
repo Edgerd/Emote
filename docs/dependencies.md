@@ -24,7 +24,7 @@
 | Android platform-tools (adb) | 1.0.41 | sdkmanager | `adb version` |
 
 - Flutter 版本记录：`.fvmrc`（`3.47.4` / `stable`）。
-- Rust 工具链锁定：`rust-toolchain.toml`（channel `1.92.0`，targets 含 `aarch64-linux-android`、`armv7-linux-androideabi`、`x86_64-linux-android`、`x86_64-unknown-linux-gnu`）。
+- Rust 工具链锁定：`rust-toolchain.toml`（channel `1.92.0`，targets 含 `aarch64-linux-android`、`armv7-linux-androideabi`、`x86_64-linux-android`、`x86_64-unknown-linux-gnu`、`x86_64-pc-windows-msvc`）。
 
 ## 二、三端系统依赖清单
 
@@ -46,11 +46,32 @@
 | 默认传输层 QUIC | `quinn` | 0.11.11 | Cargo.toml `quinn = "0.11.11"` | Rust 段（传输层） |
 | TCP 回退 | `tokio::net::TcpStream` | — | 由 quinn 传递引入 Tokio；如需显式声明 `tokio`，在 Rust 段创建 Cargo.toml 时精确锁定具体版本 | Rust 段（回退路径） |
 | 零拷贝 buffer（性能工程） | `bytes` | 1.12.1 | Cargo.toml `bytes = "1.12.1"` | Rust 段 |
-| 动态取色（Flutter / M3） | `dynamic_color` | 2.1.0 | pubspec `dynamic_color: ^2.1.0` | 主题 / UI 段 |
+| 动态取色（Flutter / M3） | `dynamic_color` | 1.9.0 | pubspec `dynamic_color: 1.9.0` | 主题 / UI 段 |
 | Linux 输入注入（libei 纯 Rust 实现） | `reis` | 0.7.0 | Cargo.toml `reis = { version = "=0.7.0", features = ["tokio"] }`（仅 Linux 目标） | 输入注入段（1.4+） |
 | 可选软件解码后端 | `ffmpeg-next` | 8.1.0 | Cargo.toml `ffmpeg-next = { version = "=8.1.0", optional = true }` | 4.3 段按需启用 |
 
-> 版本号均为具体数字（已完成 crates.io / pub.dev 核实）：quinn 0.11.11（MSRV 1.85，Rust 1.92.0 兼容）、bytes 1.12.1、dynamic_color 2.1.0、reis 0.7.0、ffmpeg-next =8.1.0（维护模式，官方建议精确锁定）。
+> 版本号均为具体数字（已完成 crates.io / pub.dev 核实）：quinn 0.11.11（MSRV 1.85，Rust 1.92.0 兼容）、bytes 1.12.1、dynamic_color 1.9.0（pubspec 实际锁定值）、reis 0.7.0、ffmpeg-next =8.1.0（维护模式，官方建议精确锁定）。
+
+### Rust 核心实际依赖（`rust/emote_core/Cargo.toml`，随第 3 段落地）
+
+| 依赖 | 版本 | 说明 |
+| --- | --- | --- |
+| `flutter_rust_bridge` | =2.13.0 | FRB 运行时，与 codegen 锁定一致 |
+| `serde` | 1.0（derive） | 消息/设备结构体序列化 |
+| `uuid` | 1.12（v4, serde） | 设备唯一 ID |
+| `mdns-sd` | 0.11 | mDNS 广播与发现 |
+| `tokio` | 1（rt-multi-thread 等） | 异步运行时 |
+| `quinn` | 0.11.11 | QUIC 传输层（见上表） |
+| `rcgen` | 0.14 | QUIC 自签证书 |
+| `bytes` | 1.12.1 | 零拷贝 buffer（见上表） |
+| `anyhow` / `futures` / `dashmap` / `tracing` | 1 / 0.3 / 6 / 0.1 | 错误、并发、容器、日志 |
+| `scrcpy-protocol` | 0.1.1 | scrcpy 协议层（VideoPacket/ControlSender） |
+| `libc` | 0.2 | uinput ioctl（纯 C 绑定） |
+| `openh264`（仅桌面 target） | 0.5 | 软编/软解后端 |
+| `windows`（仅 Windows） | 0.61 | SendInput 注入 |
+| `x11-dl`（仅 Linux 非 Android） | 2 | X11 XTest 注入 |
+| `pinray`（可选，feature `capture`） | 0.2 | 屏幕捕获（默认关） |
+| `sha2` | 0.10 | QUIC 证书指纹校验 |
 
 ## 四、参考声明片段（后续段落地，本段不创建）
 
@@ -70,8 +91,8 @@ ffmpeg-next = { version = "=8.1.0", optional = true }
 ### pubspec.yaml（主题 / UI 段）
 ```yaml
 dependencies:
-  # M3 动态取色，Android 动态色 + 深色模式
-  dynamic_color: ^2.1.0
+  # M3 动态取色，Android 动态色 + 深色模式（pubspec.yaml 实际锁定 1.9.0）
+  dynamic_color: 1.9.0
 ```
 
 ## 五、阶段边界提醒

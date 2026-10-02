@@ -66,7 +66,17 @@ impl AdbConnection {
     }
 
     /// 在设备 shell 内启动 scrcpy-server（常驻；其 stdout 为视频/控制流前导）。
+    ///
+    /// 安全约束：`ServerOptions` 参数会以空格拼接为单个 shell 串经 `adb shell` 执行，
+    /// 因此先逐参数做 shell 安全校验（拒绝含 shell 元字符的值），防止命令注入。
     pub fn start_server(&self, options: &ServerOptions) -> Result<()> {
+        for arg in options.to_server_args() {
+            if !is_shell_safe_token(&arg) {
+                return Err(anyhow::anyhow!(
+                    "scrcpy-server 参数 {arg:?} 含 shell 元字符，拒绝经 adb shell 执行"
+                ));
+            }
+        }
         let cmd = build_start_server_command(options);
         let args = vec!["shell".to_string(), cmd];
         let out = self.run(&args)?;
@@ -110,6 +120,9 @@ pub fn build_forward_args(local: u16, remote: u16) -> Vec<String> {
 }
 
 /// 构造在设备上启动 scrcpy-server 的完整 shell 命令串。
+///
+/// 调用方（`start_server`）已对参数做 [`is_shell_safe_token`] 校验；
+/// 直接调用本函数拼接外部输入前必须先完成该校验。
 pub fn build_start_server_command(options: &ServerOptions) -> String {
     let joined = options.to_server_args().join(" ");
     format!(
@@ -120,9 +133,50 @@ pub fn build_start_server_command(options: &ServerOptions) -> String {
     )
 }
 
+/// 判定单个 token 是否可安全拼入 `adb shell` 命令串。
+///
+/// 仅允许 scrcpy-server 参数形态：`--key=value`，其中 key/value 限定为
+/// `[A-Za-z0-9._-]`。任何 shell 元字符（空格、`;`、`$`、`|`、反引号、括号等）
+/// 一律拒绝，防止经 `adb shell` 向目标设备注入命令。
+pub fn is_shell_safe_token(token: &str) -> bool {
+    if !token.starts_with("--") {
+        return false;
+    }
+    let value = token
+        .strip_prefix("--")
+        .and_then(|rest| rest.split_once('='))
+        .map(|(_, v)| v);
+    match value {
+        Some(v) => v.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')),
+        None => token[2..].chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-')),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scrcpy::server::ServerOptions;
+
+    #[test]
+    fn default_options_are_shell_safe() {
+        for arg in ServerOptions::default().to_server_args() {
+            assert!(is_shell_safe_token(&arg), "参数 {arg:?} 应通过校验");
+        }
+    }
+
+    #[test]
+    fn rejects_shell_metacharacters() {
+        for bad in [
+            "--max-size=1080; rm -rf /",
+            "--bit-rate=$(reboot)",
+            "--raw-stream=true`id`",
+            "--max-size=1080 extra",
+            "not-a-flag",
+        ] {
+            assert!(!is_shell_safe_token(bad), "应拒绝 {bad:?}");
+        }
+    }
+
 
     #[test]
     fn forward_args_correct() {
