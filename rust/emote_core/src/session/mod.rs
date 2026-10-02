@@ -95,7 +95,12 @@ impl Default for SessionConfig {
 }
 
 /// 统一远控会话接口（三方向共用）。
-pub trait RemoteSession {
+///
+/// `Send + Sync` 使 `SessionManager` 的 `DashMap<String, Box<dyn RemoteSession>>` 可跨线程共享
+/// （FFI `SessionHandle` 不透明句柄需在 Rust/Dart 线程边界传递，`flutter_rust_bridge` 要求
+/// 其内部值 `Send + Sync`）。各具体会话的字段（openh264 编解码器、输入后端、`dyn ScreenSource`）
+/// 均已是 `Send + Sync`。
+pub trait RemoteSession: Send + Sync {
     /// 会话方向。
     fn direction(&self) -> SessionDirection;
     /// 启动会话；缺少能力时返回 `Ended` 而非 panic。
@@ -240,5 +245,13 @@ mod tests {
         mgr.create("x", &SessionConfig::default()).expect("create");
         assert!(mgr.create("x", &SessionConfig::default()).is_err(), "重复 id 应报错");
         assert_eq!(mgr.count(), 1);
+    }
+
+    /// 编译期断言：`SessionManager` 必须 `Send + Sync`（FRB 不透明句柄需在
+    /// Rust/Dart 线程边界传递；若回归到非 `Send + Sync` 字段，此测试在编译期即失败）。
+    #[test]
+    fn session_manager_is_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<SessionManager>();
     }
 }

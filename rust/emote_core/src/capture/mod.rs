@@ -42,7 +42,9 @@ impl Frame {
 }
 
 /// 屏幕画面来源。`next_frame` 在「无更多帧 / 源不可用」时返回 `None`，绝不 panic。
-pub trait ScreenSource {
+///
+/// `Send + Sync` 使 `Box<dyn ScreenSource>` 可跨线程持有（供远控会话管理器在 FFI 线程边界使用）。
+pub trait ScreenSource: Send + Sync {
     /// 取下一帧画面。
     fn next_frame(&mut self) -> Option<Frame>;
     /// 当前宽高（偶数对齐）。

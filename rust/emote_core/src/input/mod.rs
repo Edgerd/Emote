@@ -128,7 +128,10 @@ impl InputEvent {
 }
 
 /// 输入注入后端。
-pub trait InputSink: Send {
+///
+/// `Send + Sync` 使 `InputDispatcher`（持有 `Box<dyn InputSink>`）可跨线程共享（供远控会话管理器
+/// 在 FFI 线程边界使用）；各后端均为无共享可变状态的单元/整数结构，天然满足 `Sync`。
+pub trait InputSink: Send + Sync {
     /// 后端名（如 `x11-xtest` / `uinput` / `sendinput` / `null`）。
     fn name(&self) -> &'static str;
     /// 注入一个事件；不可用时返回错误（上层降级，不 panic）。
