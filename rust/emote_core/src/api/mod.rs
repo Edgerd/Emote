@@ -6,3 +6,4 @@ pub mod simple;
 
 pub mod discovery;
 pub mod connection;
+pub mod session;

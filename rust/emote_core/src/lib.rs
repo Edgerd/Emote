@@ -20,6 +20,7 @@ pub mod discovery;
 pub mod connection;
 pub mod transport;
 pub mod scrcpy;
+pub mod codec;
 pub mod capture;
 pub mod encoder;
 pub mod decoder;
