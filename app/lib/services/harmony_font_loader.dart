@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
@@ -75,6 +76,15 @@ class FontManager extends ChangeNotifier {
       'https://developer.huawei.com/images/download/general/HarmonyOS-Sans.zip';
   static const Duration kTimeout = Duration(seconds: 60);
   static const String kHarmonyFamily = 'HarmonyOS Sans';
+
+  /// 字体包（HarmonyOS-Sans.zip，2026-10-02 固化）的 SHA-256。
+  /// 下载完成后校验实际文件哈希，不符即丢弃回退系统字体，阻断供应链投毒/MITM 换包。
+  static const String kExpectedSha256 =
+      'fb02c86e358cd9aad8d4dfa957ee502381e7ee2e94499a9133add4324b6ce69a';
+
+  /// 允许下载/重定向落地的域名（含 `.` 前缀匹配子域）。重定向仅允许回到这些域，
+  /// 防止被 302 到任意第三方域替换包内容。
+  static const List<String> kAllowedHostSuffixes = ['huawei.com'];
 
   /// 解析「系统默认字体」选择下应使用的字体族名（[SettingsController] 的 system 分支）。
   ///
@@ -410,6 +420,11 @@ class FontManager extends ChangeNotifier {
     }
 
     // 2) 流式下载 zip 到临时文件（带进度、超时）；失败走回退。
+    if (SettingsController().lanOnly) {
+      AppLog().info(
+          '字体', '纯局域网模式（设置 → 纯局域网模式），跳过 HarmonyOS 公网下载，回退系统字体');
+      return null;
+    }
     _enterDownloading();
     final zip = await _downloadToTempFile(kDownloadUrl, kTimeout);
     try {
@@ -595,10 +610,19 @@ class FontManager extends ChangeNotifier {
         // 否则会被当成真实 ttf 落盘，浪费磁盘并可能干扰 CJK 目录扫描。
         final name = file.name.toLowerCase();
         if (name.contains('__macosx') || name.contains('/._')) continue;
-        // 防 zip 路径穿越：统一用 / 规范化后拼接到 outDir。
-        final rel = file.name.split('/').join(Platform.pathSeparator);
-        final target = File('$outDir$Platform.pathSeparator$rel');
-        if (!target.path.startsWith(outDir)) continue; // 越界跳过
+        // 防 zip 路径穿越：统一把条目名中的 `\` 视为分隔符并规范化；
+      // 拒绝 `..`、绝对路径（/ 或盘符 C:\）、空段，拼接后仍做越界兜底。
+      final raw = file.name.replaceAll('\\', '/');
+      final segs = raw.split('/');
+      final safe = !segs.contains('..') &&
+          !raw.startsWith('/') &&
+          !RegExp(r'^[A-Za-z]:').hasMatch(raw);
+      if (!safe || segs.any((s) => s.isEmpty)) continue;
+      final rel = segs.join(Platform.pathSeparator);
+      final target = File('$outDir$Platform.pathSeparator$rel');
+      if (!target.path.startsWith('$outDir$Platform.pathSeparator')) {
+        continue; // 越界兜底：任何逃出 outDir 的路径一律跳过
+      }
         target.parent.createSync(recursive: true);
         final data = file.content as List<int>;
         if (data.isNotEmpty) target.writeAsBytesSync(data, flush: true);
@@ -609,6 +633,11 @@ class FontManager extends ChangeNotifier {
   }
 
   /// 流式下载 zip 到临时文件，边收边写盘（内存占用与包大小解耦），并刷新进度。
+  ///
+  /// 安全约束：
+  /// - 重定向手动处理：每次 3xx 的 `Location` 必须落在 [kAllowedHostSuffixes] 白名单内，
+  ///   否则拒绝（防止被 302 到第三方域换包）；最多跟随 3 跳；
+  /// - 下载完成后校验 SHA-256 与 [kExpectedSha256] 一致，不符即删除并报错。
   Future<File> _downloadToTempFile(String url, Duration timeout) async {
     final dir = await getApplicationSupportDirectory();
     final tmp = File('${dir.path}/harmony_sans_download.zip');
@@ -620,16 +649,19 @@ class FontManager extends ChangeNotifier {
 
     final client = HttpClient()
       ..connectionTimeout = timeout
-      ..idleTimeout = timeout;
+      ..idleTimeout = timeout
+      ..followRedirects = false;
     try {
-      final req = await client.getUrl(Uri.parse(url)).timeout(timeout);
-      final resp = await req.close().timeout(timeout * 2);
+      final target = Uri.parse(url);
+      final resp =
+          await _openWhitelisted(client, target, maxRedirects: 3);
       if (resp.statusCode != 200) {
-        throw HttpException('下载字体失败：HTTP ${resp.statusCode}', uri: req.uri);
+        throw HttpException('下载字体失败：HTTP ${resp.statusCode}',
+            uri: resp.request.uri);
       }
-      final total =
-          int.tryParse(resp.headers.value(HttpHeaders.contentLengthHeader) ?? '') ??
-              0;
+      final total = int.tryParse(
+          resp.headers.value(HttpHeaders.contentLengthHeader) ?? '') ??
+          0;
       _downloadedBytes = 0;
       _totalBytes = total;
       _progress = total > 0 ? 0 : -1;
@@ -663,10 +695,66 @@ class FontManager extends ChangeNotifier {
         } catch (_) {}
         throw const FormatException('下载的字体包不是合法 zip');
       }
+
+      // SHA-256 完整性校验：与固化指纹不符（被换包 / 上游变更）即丢弃并回退系统字体。
+      final digest = await _sha256Hex(tmp);
+      if (digest != kExpectedSha256) {
+        AppLog().warn('字体',
+            '字体包 SHA-256 不匹配（期望 $kExpectedSha256，实际 $digest），丢弃并回退系统字体');
+        try {
+          tmp.deleteSync();
+        } catch (_) {}
+        throw const FormatException('字体包 SHA-256 校验失败，已拒绝使用');
+      }
       return tmp;
     } finally {
       client.close(force: true);
     }
+  }
+
+  /// 打开请求并**按白名单**跟随重定向：每跳 3xx 校验 `Location` 主机在
+  /// [kAllowedHostSuffixes] 内，越出即抛 [HttpException]；最多 `maxRedirects` 跳。
+  Future<HttpClientResponse> _openWhitelisted(
+    HttpClient client,
+    Uri url, {
+    required int maxRedirects,
+  }) async {
+    for (var i = 0; ; i++) {
+      if (!_hostAllowed(url.host)) {
+        throw HttpException('字体下载域名 ${url.host} 不在白名单内',
+            uri: url);
+      }
+      final req = await client.getUrl(url).timeout(Duration(seconds: 30));
+      final resp = await req.close().timeout(Duration(seconds: 120));
+      final code = resp.statusCode;
+      if (code >= 300 && code < 400) {
+        final location = resp.headers.value(HttpHeaders.locationHeader);
+        resp.close();
+        if (location == null || i + 1 > maxRedirects) {
+          throw HttpException(
+              '字体下载重定向被拒绝（${location ?? '无 Location 头'}），防止跳出白名单',
+              uri: url);
+        }
+        url = Uri.parse(location).replace(scheme: 'https'); // 强制回 https，防降级
+        continue;
+      }
+      return resp;
+    }
+  }
+
+  /// 主机是否落在允许域内（等值或 `.suffix` 子域）。
+  static bool _hostAllowed(String host) {
+    final h = host.toLowerCase();
+    for (final suffix in kAllowedHostSuffixes) {
+      if (h == suffix || h.endsWith('.$suffix')) return true;
+    }
+    return false;
+  }
+
+  /// 计算文件 SHA-256 小写 hex（包体约 50MB，整读参与摘要）。
+  Future<String> _sha256Hex(File f) async {
+    final bytes = await f.readAsBytes();
+    return sha256.convert(bytes).toString();
   }
 
   /// 读取文件头校验 ZIP 魔数。

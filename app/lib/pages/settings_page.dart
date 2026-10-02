@@ -794,6 +794,17 @@ class _PersonalizationCard extends StatelessWidget {
                     settings.setTransportPref(s.first),
               ),
             ),
+            const Divider(height: 1, indent: 72),
+            SwitchListTile(
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 4),
+              title: const Text('纯局域网模式'),
+              subtitle: const Text(
+                  '禁止任何公网下载（含 HarmonyOS 字体包），仅使用系统默认字体'),
+              secondary: const Icon(Icons.cloud_off_outlined),
+              value: settings.lanOnly,
+              onChanged: (v) => settings.setLanOnly(v),
+            ),
           ],
         );
       },

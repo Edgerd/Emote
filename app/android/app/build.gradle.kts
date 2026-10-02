@@ -53,6 +53,14 @@ android {
             signingConfig = if (keystorePropertiesFile.exists() && keystoreProperties["storeFile"] != null) {
                 signingConfigs.getByName("release")
             } else {
+                println("""
+                    =====================================================================
+                    WARNING: 未找到 Android release 签名配置（app/android/key.properties）。
+                    本次 release APK 将回退使用 **debug** 签名（仅本地调试可用，
+                    不可分发）。CI 请配置 ANDROID_KEYSTORE_* secrets；本地可生成
+                    keystore 并写入 key.properties 后重试。
+                    =====================================================================
+                """.trimIndent())
                 signingConfigs.getByName("debug")
             }
         }

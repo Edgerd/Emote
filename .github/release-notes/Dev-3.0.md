@@ -42,6 +42,8 @@
 ---
 
 ## 已知问题
+- **桌面控 Android 方向开箱不可用**：scrcpy-server.jar 分发未完成（见「下一步计划」），`push_server` 需要本机已手动放置 jar，否则该方向会话无法启动；`ScrcpySession` 代码可用但缺 jar 时失败。
+- QUIC 客户端当前跳过对端证书校验（局域网信任模型），同网段可被伪造；严格校验（`make_client_endpoint_strict`，证书 CN 已绑定设备 ID）已就绪，待 `cert=` 指纹经 mDNS TXT 发布后启用。
 - FRB 重生成、`flutter analyze`、三端整包（Windows/Linux/Android）在 CI 上验证；沙箱无 Flutter/NDK 工具链。
 - 真机 scrcpy 全链路、桌面双向控制、跨端局域网互发现与 30s+ 心跳保活需真机联调。
 - AppImage 为「尽力而为」产物，若无法打包则以 tar.gz 为准。
@@ -50,10 +52,11 @@
 
 ## 下一步计划
 
+- [ ] scrcpy-server.jar 分发（5，当前仅保留 `SCRCPY_SERVER_PATH` 常量 + `push_server` 接口；完成前桌面控 Android 方向开箱不可用）
+- [ ] QUIC 证书指纹发布（mDNS TXT `cert=`）并启用严格对端校验
 - [ ] 硬件加速解码（4.4）
 - [ ] 自适应码率与断线重连（4.5 / 4.6）
 - [ ] 文档交付（5）
-- [ ] scrcpy-server.jar 分发（5，当前仅保留 `SCRCPY_SERVER_PATH` 常量 + `push_server` 接口）
 - [ ] 多会话标签页
 
 ---
