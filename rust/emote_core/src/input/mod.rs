@@ -186,6 +186,7 @@ pub struct InputDispatcher {
 impl InputDispatcher {
     /// 依当前环境探测选择后端。
     #[must_use]
+    #[allow(unreachable_code)] // Windows target：windows 块无条件 return，NullSink 兜底分支不可达
     pub fn new() -> Self {
         #[cfg(all(desktop, target_os = "linux"))]
         {

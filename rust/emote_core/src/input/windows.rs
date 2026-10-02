@@ -5,7 +5,8 @@
 
 use anyhow::Result;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
-    SendInput, VIRTUAL_KEY, INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+    SendInput, VIRTUAL_KEY, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP,
+    KEYBD_EVENT_FLAGS,
 };
 
 use crate::input::{InputEvent, InputSink};
@@ -21,22 +22,23 @@ impl InputSink for SendInputSink {
     fn send(&self, ev: &InputEvent) -> Result<()> {
         match ev {
             InputEvent::Key { keycode, down } => {
-                let inputs = [INPUT {
-                    dwType: INPUT_KEYBOARD,
-                    u: unsafe {
-                        std::mem::zeroed::<_>().ki = KEYBDINPUT {
-                            wVk: VIRTUAL_KEY(*keycode as u16),
-                            wScan: 0,
-                            dwFlags: if *down {
-                                windows::Win32::UI::Input::KeyboardAndMouse::KEYBD_EVENT_FLAGS(0)
-                            } else {
-                                KEYEVENTF_KEYUP
-                            },
-                            time: 0,
-                            dwExtraInfo: 0,
-                        };
-                        std::mem::zeroed()
+                // windows-rs 0.61 API：`INPUT { r#type, Anonymous }` + union `INPUT_0 { ki }`，
+                // `wVk: VIRTUAL_KEY`、`dwFlags: KEYBD_EVENT_FLAGS`、`SendInput(&[INPUT], cbsize)`。
+                let mut anon = INPUT_0::default();
+                anon.ki = KEYBDINPUT {
+                    wVk: VIRTUAL_KEY(*keycode as u16),
+                    wScan: 0,
+                    dwFlags: if *down {
+                        KEYBD_EVENT_FLAGS(0)
+                    } else {
+                        KEYEVENTF_KEYUP
                     },
+                    time: 0,
+                    dwExtraInfo: 0,
+                };
+                let inputs = [INPUT {
+                    r#type: INPUT_KEYBOARD,
+                    Anonymous: anon,
                 }];
                 let _ =
                     unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
