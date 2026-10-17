@@ -117,6 +117,12 @@ pub trait RemoteSession: Send + Sync {
     fn next_decoded(&mut self) -> Option<VideoFrame> {
         None
     }
+    /// 设定目标码率（第 4.5 段；仅编码方向有效，其余方向 no-op）。
+    fn set_bitrate(&mut self, _bps: u32) {}
+    /// 当前 QoS 目标码率（无编码方向返回 `None`）。
+    fn qos_bitrate(&self) -> Option<u32> {
+        None
+    }
 }
 
 /// 会话管理器：按设备 id 管理多会话。
@@ -173,6 +179,19 @@ impl SessionManager {
     pub fn input(&self, id: &str, ev: &InputEvent) -> Result<()> {
         let mut guard = self.sessions.get_mut(id).ok_or_else(|| anyhow!("无会话 {id}"))?;
         guard.input(ev)
+    }
+
+    /// 设定会话目标码率（第 4.5 段；仅编码方向有效）。
+    pub fn set_bitrate(&self, id: &str, bps: u32) -> Result<()> {
+        let mut guard = self.sessions.get_mut(id).ok_or_else(|| anyhow!("无会话 {id}"))?;
+        guard.set_bitrate(bps);
+        Ok(())
+    }
+
+    /// 查询会话 QoS 目标码率（无编码方向返回 `None`）。
+    #[must_use]
+    pub fn qos_bitrate(&self, id: &str) -> Option<u32> {
+        self.sessions.get(id).and_then(|s| s.qos_bitrate())
     }
 
     /// 移除并返回某会话。
@@ -247,6 +266,25 @@ mod tests {
         mgr.create("x", &SessionConfig::default()).expect("create");
         assert!(mgr.create("x", &SessionConfig::default()).is_err(), "重复 id 应报错");
         assert_eq!(mgr.count(), 1);
+    }
+
+    /// 第 4.5 段：编码方向会话的码率可设定并反馈 QoS；解码方向 no-op。
+    #[test]
+    fn manager_adaptive_bitrate_qos() {
+        let mgr = SessionManager::new();
+        let mut enc_cfg = SessionConfig::default();
+        enc_cfg.direction = SessionDirection::DesktopSelf;
+        enc_cfg.video.bit_rate = 2_000_000;
+        mgr.create("enc", &enc_cfg).expect("create enc");
+        mgr.create("dec", &SessionConfig::default()).expect("create dec");
+
+        assert_eq!(mgr.qos_bitrate("enc"), Some(2_000_000));
+        mgr.set_bitrate("enc", 1_000_000).expect("set_bitrate");
+        assert_eq!(mgr.qos_bitrate("enc"), Some(1_000_000));
+        // 解码方向无编码器 → None；不存在的会话 → None。
+        assert_eq!(mgr.qos_bitrate("dec"), None);
+        assert_eq!(mgr.qos_bitrate("nope"), None);
+        assert!(mgr.set_bitrate("nope", 100).is_err());
     }
 
     /// 编译期断言：`SessionManager` 必须 `Send + Sync`（FRB 不透明句柄需在

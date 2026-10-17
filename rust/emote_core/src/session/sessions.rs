@@ -11,7 +11,7 @@ use anyhow::{anyhow, Result};
 use crate::capture::{ScreenSource, SyntheticSource};
 use crate::codec::H264FrameType;
 use crate::decoder::{DecodedFrame, decoder_available};
-use crate::encoder::{I420Frame, EncoderOptions, encoder_available};
+use crate::encoder::{I420Frame, EncoderOptions, encoder_available, qos::{QosConfig, QosController}};
 use crate::input::{InputDispatcher, InputEvent};
 use crate::scrcpy::VideoPacket;
 
@@ -118,11 +118,15 @@ impl RemoteSession for DesktopFromSession {
     }
 }
 
-/// 3.8 Windows→Windows 本机自控制（捕获 + 编码）。
+/// 3.8 Windows→Windows 本机自控制（捕获 + 编码 + 自适应码率 4.5）。
 pub struct DesktopSelfSession {
     cfg: SessionConfig,
     state: SessionState,
     source: Option<Box<dyn ScreenSource>>,
+    /// QoS 控制器（第 4.5 段：按延迟自适应码率/帧率）。
+    qos: QosController,
+    /// 编码器当前实际应用的码率（与 QoS 目标不一致时重建编码器）。
+    applied_bps: u32,
     #[cfg(desktop)]
     encoder: Option<OpenH264Encoder>,
 }
@@ -133,9 +137,30 @@ impl DesktopSelfSession {
             cfg: cfg.clone(),
             state: SessionState::Stopped,
             source: None,
+            qos: QosController::new(QosConfig {
+                max_bitrate_bps: 8_000_000,
+                ..QosConfig::default()
+            }),
+            applied_bps: 0,
             #[cfg(desktop)]
             encoder: None,
         }
+    }
+
+    /// 外部设定目标码率（仍受 QoS min/max 夹紧）。
+    pub fn set_bitrate(&mut self, bps: u32) {
+        self.qos.set_target(bps, self.qos.current().fps);
+    }
+
+    /// 反馈一次端到端延迟（ms），驱动 QoS 调整（受冷却间隔约束）。
+    pub fn on_latency_ms(&mut self, latency_ms: u32) {
+        let _ = self.qos.update(latency_ms);
+    }
+
+    /// 当前 QoS 目标码率。
+    #[must_use]
+    pub fn qos_bitrate(&self) -> u32 {
+        self.qos.current().bitrate_bps
     }
 
     /// 抓一帧并编码，返回 AnnexB 压缩流（无源/无编码器后端时 `None`，不 panic）。
@@ -143,6 +168,13 @@ impl DesktopSelfSession {
         let frame = self.source.as_mut()?.next_frame()?;
         #[cfg(desktop)]
         {
+            // QoS 目标码率变化时按新目标重建编码器（第 4.5 段）。
+            if self.encoder.is_some() && self.qos_bitrate() != self.applied_bps {
+                let mut opts = encoder_options(&self.cfg);
+                opts.bitrate_bps = self.qos_bitrate();
+                self.encoder = OpenH264Encoder::new(&opts).ok();
+                self.applied_bps = self.qos_bitrate();
+            }
             let i420 = I420Frame {
                 width: frame.width,
                 height: frame.height,
@@ -167,6 +199,12 @@ impl RemoteSession for DesktopSelfSession {
     fn direction(&self) -> SessionDirection {
         SessionDirection::DesktopSelf
     }
+    fn set_bitrate(&mut self, bps: u32) {
+        DesktopSelfSession::set_bitrate(self, bps);
+    }
+    fn qos_bitrate(&self) -> Option<u32> {
+        Some(DesktopSelfSession::qos_bitrate(self))
+    }
     fn start(&mut self) -> Result<()> {
         self.source = Some(Box::new(SyntheticSource::new(
             self.cfg.width,
@@ -180,6 +218,10 @@ impl RemoteSession for DesktopSelfSession {
                 return Err(anyhow!("codec_not_available"));
             }
             self.encoder = Some(OpenH264Encoder::new(&encoder_options(&self.cfg))?);
+            // QoS 目标对齐会话配置码率，避免启动即触发编码器重建。
+            self.qos
+                .set_target(self.cfg.video.bit_rate.max(1), self.cfg.video.max_fps.max(1));
+            self.applied_bps = self.qos_bitrate();
         }
         self.state = SessionState::Running;
         Ok(())

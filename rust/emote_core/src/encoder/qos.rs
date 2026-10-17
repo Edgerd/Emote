@@ -86,6 +86,15 @@ impl QosController {
         &self.params
     }
 
+    /// 外部直接设定目标参数（如用户手动限速），仍夹在配置的 min/max。
+    ///
+    /// 不影响冷却计时：下一次 `update` 仍按原节奏自适应。
+    pub fn set_target(&mut self, bitrate_bps: u32, fps: u32) {
+        self.params.bitrate_bps = bitrate_bps
+            .clamp(self.config.min_bitrate_bps, self.config.max_bitrate_bps);
+        self.params.fps = fps.clamp(self.config.min_fps, self.config.max_fps);
+    }
+
     /// 基于当前网络延迟（毫秒）决定下一步调整。
     ///
     /// 策略（§4.5）：

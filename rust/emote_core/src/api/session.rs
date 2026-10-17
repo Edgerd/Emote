@@ -113,6 +113,26 @@ impl SessionHandle {
     pub fn probe_input_backend(&self) -> String {
         crate::input::InputDispatcher::new().sink_name().to_string()
     }
+
+    /// 当前可用的硬件解码后端名（第 4.4 段探测；无则 `None`，上层回退软解）。
+    #[must_use]
+    pub fn probe_hw_decoder(&self) -> Option<String> {
+        crate::decoder::detect_hw_decoders()
+            .into_iter()
+            .next()
+            .map(|k| k.name().to_string())
+    }
+
+    /// 设定会话目标码率（第 4.5 段；仅编码方向有效，其余 no-op）。
+    pub fn set_bitrate(&self, id: &str, bps: u32) -> Result<()> {
+        self.mgr.set_bitrate(id, bps)
+    }
+
+    /// 查询会话 QoS 目标码率（无编码方向返回 `None`）。
+    #[must_use]
+    pub fn qos_bitrate(&self, id: &str) -> Option<u32> {
+        self.mgr.qos_bitrate(id)
+    }
 }
 
 impl Default for SessionHandle {

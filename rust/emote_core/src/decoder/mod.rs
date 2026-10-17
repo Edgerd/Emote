@@ -7,6 +7,10 @@
 
 use anyhow::Result;
 
+pub mod hw;
+
+pub use hw::{detect_hw_decoders, DecoderSelector, HwDecoderKind};
+
 /// 一帧解码画面（RGBA8，长度 = `width*height*4`）。
 #[derive(Debug, Clone)]
 pub struct DecodedFrame {
