@@ -148,7 +148,10 @@ pub async fn accept(endpoint: &Endpoint) -> Result<Option<Link>> {
     match endpoint.accept().await {
         Some(incoming) => {
             let conn = incoming.await.context("接受 QUIC 连接失败")?;
-            let (send, recv) = conn.open_bi().await.context("QUIC 打开双向流失败")?;
+            // 客户端用 `open_bi` 打开双向流；服务端必须用 `accept_bi` 接受
+            // **同一条流**（send 方向回程、recv 方向收客户端数据）。
+            // 此前误用 `open_bi` 会新开一条流，两端各说各话、数据面不通。
+            let (send, recv) = conn.accept_bi().await.context("QUIC 接受双向流失败")?;
             Ok(Some(link_from_streams(send, recv)))
         }
         None => Ok(None),
