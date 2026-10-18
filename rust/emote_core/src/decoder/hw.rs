@@ -11,7 +11,9 @@
 
 use anyhow::Result;
 
-use super::{decoder_available, DecodedFrame, OpenH264Decoder};
+#[cfg(desktop)]
+use super::{decoder_available, OpenH264Decoder};
+use super::DecodedFrame;
 
 /// 硬件解码后端类型。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,15 +83,18 @@ pub fn detect_hw_decoders() -> Vec<HwDecoderKind> {
 /// `open()` 返回 `Err("codec_not_available")`，与第 3 段能力位语义一致。
 pub struct DecoderSelector {
     hw: Option<HwDecoderKind>,
+    /// 软解兜底（仅桌面 target 链接 openh264；Android 上无此字段）。
+    #[cfg(desktop)]
     soft: Option<OpenH264Decoder>,
 }
 
+#[cfg(desktop)]
 impl DecoderSelector {
     /// 依环境探测创建：有硬件后端则选中它（真实解码器随 4.4 后续接入，
     /// 当前硬件路径以能力位 + 回退语义先行），否则落到软解。
     ///
     /// # Errors
-    /// 非桌面 target（无软解后端）返回 `codec_not_available`。
+    /// 无硬件且软解初始化失败时返回错误。
     pub fn open() -> Result<Self> {
         let hw = detect_hw_decoders().into_iter().next();
         let soft = if decoder_available() {
@@ -101,18 +106,6 @@ impl DecoderSelector {
             return Err(anyhow::anyhow!("codec_not_available"));
         }
         Ok(Self { hw, soft })
-    }
-
-    /// 选中的硬件后端（无则 `None`，表示软解）。
-    #[must_use]
-    pub fn hw_backend(&self) -> Option<HwDecoderKind> {
-        self.hw
-    }
-
-    /// 当前生效的后端名（硬件名或 `"openh264"`）。
-    #[must_use]
-    pub fn backend_name(&self) -> &'static str {
-        self.hw.map_or("openh264", HwDecoderKind::name)
     }
 
     /// 解码一段 AnnexB 数据。
@@ -128,8 +121,40 @@ impl DecoderSelector {
         if let Some(soft) = self.soft.as_mut() {
             return soft.decode(annexb);
         }
-        // 无软解且无硬件实现 → 无解码输出（Android target 预期路径）。
+        // 无软解且无硬件实现 → 无解码输出。
         anyhow::bail!("codec_not_available")
+    }
+}
+
+#[cfg(not(desktop))]
+impl DecoderSelector {
+    /// 非桌面 target（Android）：无软解后端，仅上报硬件能力位。
+    /// 真实 MediaCodec 解码器随真机联调段接入。
+    pub fn open() -> Result<Self> {
+        let hw = detect_hw_decoders().into_iter().next();
+        Ok(Self { hw })
+    }
+
+    /// 无可用解码后端 → 返回 `codec_not_available`（不 panic）。
+    ///
+    /// # Errors
+    /// 恒返回 `codec_not_available`。
+    pub fn decode(&mut self, _annexb: &[u8]) -> Result<Option<DecodedFrame>> {
+        anyhow::bail!("codec_not_available")
+    }
+}
+
+impl DecoderSelector {
+    /// 选中的硬件后端（无则 `None`，表示软解）。
+    #[must_use]
+    pub fn hw_backend(&self) -> Option<HwDecoderKind> {
+        self.hw
+    }
+
+    /// 当前生效的后端名（硬件名或 `"openh264"`）。
+    #[must_use]
+    pub fn backend_name(&self) -> &'static str {
+        self.hw.map_or("openh264", HwDecoderKind::name)
     }
 }
 
@@ -146,6 +171,7 @@ mod tests {
         }
     }
 
+    #[cfg(desktop)]
     #[test]
     fn selector_falls_back_to_soft_in_sandbox() {
         // 沙箱（Linux 无 /dev/dri）应回退 openh264 软解，全链路可继续。
@@ -154,6 +180,7 @@ mod tests {
         assert!(sel.hw_backend().is_none());
     }
 
+    #[cfg(desktop)]
     #[test]
     fn selector_decodes_annexb_after_fallback() {
         // 回退后的软解与第 3 段 round-trip 等价：能解出合成源编码流。

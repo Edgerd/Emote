@@ -6,12 +6,19 @@
 
 use std::collections::VecDeque;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
+#[cfg(desktop)]
+use anyhow::anyhow;
 
 use crate::capture::{ScreenSource, SyntheticSource};
 use crate::codec::H264FrameType;
-use crate::decoder::{DecodedFrame, decoder_available};
-use crate::encoder::{I420Frame, EncoderOptions, encoder_available, qos::{QosConfig, QosController}};
+use crate::decoder::DecodedFrame;
+#[cfg(desktop)]
+use crate::decoder::decoder_available;
+use crate::encoder::EncoderOptions;
+#[cfg(desktop)]
+use crate::encoder::{I420Frame, encoder_available};
+use crate::encoder::qos::{QosConfig, QosController};
 use crate::input::{InputDispatcher, InputEvent};
 use crate::scrcpy::VideoPacket;
 
