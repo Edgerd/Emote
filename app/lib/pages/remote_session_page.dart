@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/remote_session_service.dart';
 import '../src/rust/session.dart';
+import '../widgets/metrics_overlay.dart';
 import '../widgets/remote_view.dart';
 
 /// 远程会话页（第 3.6/3.10 段）：演示三方向远控会话的可测管线。
@@ -91,7 +92,7 @@ class _RemoteSessionPageState extends State<RemoteSessionPage> {
                 ],
               ),
               const SizedBox(height: 12),
-              // 远控画面（RawImage 渲染；无帧时占位）。
+              // 远控画面（RawImage 渲染；无帧时占位；运行中叠加性能浮层）。
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
@@ -99,15 +100,32 @@ class _RemoteSessionPageState extends State<RemoteSessionPage> {
                     borderRadius: BorderRadius.circular(16),
                   ),
                   alignment: Alignment.center,
-                  child: w > 0 && rgba.isNotEmpty
-                      ? RemoteView(bytes: rgba, width: w, height: h)
-                      : Text(
-                          _started ? '等待远程画面…' : '会话未启动',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(color: scheme.onSurfaceVariant),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Center(
+                        child: w > 0 && rgba.isNotEmpty
+                            ? RemoteView(bytes: rgba, width: w, height: h)
+                            : Text(
+                                _started ? '等待远程画面…' : '会话未启动',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                        color: scheme.onSurfaceVariant),
+                              ),
+                      ),
+                      // 性能监控浮层（第 4.9 段；仅运行中显示）。
+                      if (_svc.running)
+                        MetricsOverlay(
+                          fps: _svc.fps,
+                          latencyMs: _svc.latencyMs,
+                          bitrateKbps: _svc.bitrateKbps,
+                          encodeMs: _svc.encodeMs,
+                          decodeMs: _svc.decodeMs,
                         ),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 12),

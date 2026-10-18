@@ -1,8 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import '../services/app_log.dart';
 import '../services/harmony_font_loader.dart';
+import '../widgets/mobile_session_stack.dart';
+import '../widgets/session_tabs.dart';
 import 'about_page.dart';
 import 'remote_session_page.dart';
 import 'settings_page.dart';
@@ -112,6 +115,18 @@ class _MorePageState extends State<MorePage> {
     );
   }
 
+  /// 多会话入口（第 4.2 段）：桌面走标签容器，移动端走会话栈。
+  void _openMultiSession() {
+    final desktop = !kIsWeb &&
+        const [TargetPlatform.windows, TargetPlatform.macOS, TargetPlatform.linux]
+            .contains(defaultTargetPlatform);
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => desktop ? const SessionContainerPage() : const MobileSessionHost(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -171,6 +186,12 @@ class _MorePageState extends State<MorePage> {
                 title: '远程会话',
                 subtitle: '演示三方向远控会话与画面渲染管线',
                 onTap: _openRemoteSession,
+              ),
+              _MoreTile(
+                icon: Icons.tab_outlined,
+                title: '多会话管理',
+                subtitle: '多标签 / 多栈管理并发的远控会话',
+                onTap: _openMultiSession,
               ),
               _MoreTile(
                 icon: Icons.settings_outlined,

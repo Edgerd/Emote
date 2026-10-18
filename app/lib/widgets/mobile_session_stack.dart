@@ -3,15 +3,57 @@ import 'package:flutter/material.dart';
 import '../pages/remote_session_page.dart';
 import '../theme/app_theme.dart';
 
+/// 移动端多会话宿主（第 4.2 段）：管理会话栈的增/关状态并驱动 [MobileSessionStack]。
+///
+/// 作为「更多」页入口推送的页面：内含「添加会话」按钮，返回键退出宿主。
+class MobileSessionHost extends StatefulWidget {
+  const MobileSessionHost({super.key});
+
+  @override
+  State<MobileSessionHost> createState() => _MobileSessionHostState();
+}
+
+class _MobileSessionHostState extends State<MobileSessionHost> {
+  final List<String> _sessions = ['dev-local'];
+
+  void _add() {
+    setState(() => _sessions.add('dev-${_sessions.length + 1}'));
+  }
+
+  void _removeTop() {
+    if (_sessions.length <= 1) return;
+    setState(() => _sessions.removeLast());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('远程会话'),
+        actions: [
+          IconButton(icon: const Icon(Icons.add), tooltip: '添加会话', onPressed: _add),
+        ],
+      ),
+      body: MobileSessionStack(
+        sessionIds: List.of(_sessions),
+        onPopTop: _sessions.length > 1 ? _removeTop : null,
+      ),
+    );
+  }
+}
+
 /// Android 端多会话页面栈管理（第 4.2 段）。
 ///
 /// 每个会话一个独立 `Navigator` 页面，返回键关闭最上层会话。
 /// 桌面端使用 [SessionContainerPage] 标签页，此组件仅限移动端。
 class MobileSessionStack extends StatefulWidget {
-  const MobileSessionStack({super.key, required this.sessionIds});
+  const MobileSessionStack({super.key, required this.sessionIds, this.onPopTop});
 
   /// 已打开的会话 ID（栈顺序，最后一个在最上层）。
   final List<String> sessionIds;
+
+  /// 「关闭当前」回调（由宿主移除栈顶会话；为空则隐藏按钮）。
+  final VoidCallback? onPopTop;
 
   @override
   State<MobileSessionStack> createState() => _MobileSessionStackState();
@@ -33,7 +75,7 @@ class _MobileSessionStackState extends State<MobileSessionStack> with RouteAware
           );
         },
       ),
-      bottomNavigationBar: widget.sessionIds.isEmpty
+      bottomNavigationBar: widget.sessionIds.isEmpty || widget.onPopTop == null
           ? null
           : SafeArea(
               child: Padding(
@@ -50,7 +92,7 @@ class _MobileSessionStackState extends State<MobileSessionStack> with RouteAware
                       ),
                     ),
                     FilledButton(
-                      onPressed: _popTop,
+                      onPressed: widget.onPopTop,
                       child: const Text('关闭当前'),
                     ),
                   ],
@@ -58,10 +100,6 @@ class _MobileSessionStackState extends State<MobileSessionStack> with RouteAware
               ),
             ),
     );
-  }
-
-  void _popTop() {
-    _navKey.currentState?.pop();
   }
 }
 

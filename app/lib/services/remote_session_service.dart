@@ -29,11 +29,46 @@ class RemoteSessionService extends ChangeNotifier {
   int _frameHeight = 0;
   int _frames = 0;
   String _inputBackend = '';
+  // FPS 滑动窗口：最近 1s 内解出的帧时间戳（msEpoch）与帧字节数（码率估算）。
+  final List<int> _frameTimestamps = <int>[];
+  final List<int> _frameBytes = <int>[];
 
   SessionState? get state => _state;
   bool get running => _state == SessionState.running;
   int get frames => _frames;
   String get inputBackend => _inputBackend;
+
+  /// 实测帧率（最近 1s 解出的帧数；第 4.9 段性能浮层数据源）。
+  double get fps {
+    if (_frameTimestamps.isEmpty) return 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    _frameTimestamps.removeWhere((t) => now - t > 1000);
+    return _frameTimestamps.length.toDouble();
+  }
+
+  /// 实测码率（最近 1s 帧字节数换算 kbps；第 4.9 段性能浮层数据源）。
+  int get bitrateKbps {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    for (var i = _frameTimestamps.length - 1; i >= 0; i--) {
+      if (now - _frameTimestamps[i] > 1000) {
+        _frameTimestamps.removeRange(0, i + 1);
+        _frameBytes.removeRange(0, i + 1);
+        break;
+      }
+    }
+    if (_frameBytes.isEmpty) return 0;
+    final bytes = _frameBytes.fold<int>(0, (a, b) => a + b);
+    return (bytes * 8 / 1000).round();
+  }
+
+  /// 端到端延迟（ms）。FFI metrics 接口尚未生成，暂返回 0 占位。
+  int get latencyMs => 0;
+
+  /// 编码耗时（ms）。FFI metrics 接口尚未生成，暂返回 0 占位。
+  double get encodeMs => 0;
+
+  /// 解码耗时（ms）。FFI metrics 接口尚未生成，暂返回 0 占位。
+  double get decodeMs => 0;
 
   /// 最近一帧画面（用于 [RemoteView] 渲染）。
   (int, int, Uint8List) get latestFrame => (_frameWidth, _frameHeight, _rgba);
@@ -67,6 +102,8 @@ class RemoteSessionService extends ChangeNotifier {
   Future<void> stop() async {
     _poll?.cancel();
     _poll = null;
+    _frameTimestamps.clear();
+    _frameBytes.clear();
     if (_handle != null) {
       try {
         await _handle!.stop(id: _id);
@@ -89,6 +126,8 @@ class RemoteSessionService extends ChangeNotifier {
         _frameHeight = frame.height;
         _rgba = Uint8List.fromList(frame.data);
         _frames += 1;
+        _frameTimestamps.add(DateTime.now().millisecondsSinceEpoch);
+        _frameBytes.add(frame.data.length);
         notifyListeners();
       }
     } catch (e) {
